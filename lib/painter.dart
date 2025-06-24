@@ -9,6 +9,19 @@ class _SVGAPainter extends CustomPainter {
 
   /// Guaranteed to draw within the canvas bounds
   final bool clipRect;
+  
+  // Paint对象池，减少对象创建开销
+  static final Paint _bitmapPaint = Paint()..isAntiAlias = true;
+  static final Paint _fillPaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.fill;
+  static final Paint _strokePaint = Paint()
+    ..style = PaintingStyle.stroke;
+  
+  // 缓存上一帧的索引，避免重复计算
+  int? _lastFrameIndex;
+  List<bool>? _visibleSprites;
+  
   _SVGAPainter(
     this.controller, {
     this.fit = BoxFit.contain,
@@ -23,12 +36,29 @@ class _SVGAPainter extends CustomPainter {
     if (controller._canvasNeedsClear) {
       // mark cleared
       controller._canvasNeedsClear = false;
+      _lastFrameIndex = null;
+      _visibleSprites = null;
       return;
     }
+    
+    // 记录帧渲染性能
+    controller.recordFrameRender(
+      videoItem.hashCode.toString(), 
+      currentFrame
+    );
     if (size.isEmpty || controller.videoItem == null) return;
+    
     final params = videoItem.params;
     final Size viewBoxSize = Size(params.viewBoxWidth, params.viewBoxHeight);
     if (viewBoxSize.isEmpty) return;
+    
+    // 检查是否需要重新计算可见sprite
+    final currentFrameIndex = currentFrame;
+    if (_lastFrameIndex != currentFrameIndex) {
+      _updateVisibleSprites(currentFrameIndex);
+      _lastFrameIndex = currentFrameIndex;
+    }
+    
     canvas.save();
     try {
       final canvasRect = Offset.zero & size;
@@ -37,6 +67,23 @@ class _SVGAPainter extends CustomPainter {
       drawSprites(canvas, size);
     } finally {
       canvas.restore();
+    }
+  }
+  
+  /// 预计算当前帧的可见sprite，避免在绘制时重复检查
+  void _updateVisibleSprites(int frameIndex) {
+    if (_visibleSprites == null || _visibleSprites!.length != videoItem.sprites.length) {
+      _visibleSprites = List.filled(videoItem.sprites.length, false);
+    }
+    
+    for (int i = 0; i < videoItem.sprites.length; i++) {
+      final sprite = videoItem.sprites[i];
+      final imageKey = sprite.imageKey;
+      
+      // 检查sprite是否在当前帧可见
+      _visibleSprites![i] = imageKey.isNotEmpty && 
+          videoItem.dynamicItem.dynamicHidden[imageKey] != true &&
+          frameIndex < sprite.frames.length;
     }
   }
 
@@ -59,16 +106,24 @@ class _SVGAPainter extends CustomPainter {
   }
 
   void drawSprites(Canvas canvas, Size size) {
-    for (final sprite in videoItem.sprites) {
-      final imageKey = sprite.imageKey;
-      // var matteKey = sprite.matteKey;
-      if (imageKey.isEmpty ||
-          videoItem.dynamicItem.dynamicHidden[imageKey] == true) {
+    for (int i = 0; i < videoItem.sprites.length; i++) {
+      // 使用预计算的可见性检查
+      if (_visibleSprites != null && !_visibleSprites![i]) {
         continue;
       }
+      
+      final sprite = videoItem.sprites[i];
+      final imageKey = sprite.imageKey;
       final frameItem = sprite.frames[currentFrame];
+      
+      // 检查当前帧是否有内容需要绘制
+      if (!_hasVisibleContent(frameItem, imageKey)) {
+        continue;
+      }
+      
       final needTransform = frameItem.hasTransform();
       final needClip = frameItem.hasClipPath();
+      
       if (needTransform) {
         canvas.save();
         canvas.transform(Float64List.fromList(<double>[
@@ -113,22 +168,37 @@ class _SVGAPainter extends CustomPainter {
       }
     }
   }
+  
+  /// 检查当前帧是否有可见内容
+  bool _hasVisibleContent(FrameEntity frameItem, String imageKey) {
+    // 检查透明度
+    if (frameItem.hasAlpha() && frameItem.alpha <= 0.01) {
+      return false;
+    }
+    
+    // 检查是否有bitmap、shape或动态内容
+    final hasBitmap = videoItem.dynamicItem.dynamicImages[imageKey] != null ||
+        videoItem.bitmapCache[imageKey] != null;
+    final hasShapes = frameItem.shapes.isNotEmpty;
+    final hasDynamic = videoItem.dynamicItem.dynamicDrawer[imageKey] != null ||
+        videoItem.dynamicItem.dynamicText[imageKey] != null;
+    
+    return hasBitmap || hasShapes || hasDynamic;
+  }
 
   void drawBitmap(Canvas canvas, String imageKey, Rect frameRect, int alpha) {
     final bitmap = videoItem.dynamicItem.dynamicImages[imageKey] ??
         videoItem.bitmapCache[imageKey];
     if (bitmap == null) return;
 
-    final bitmapPaint = Paint();
-    bitmapPaint.filterQuality = filterQuality;
-    //解决bitmap锯齿问题
-    bitmapPaint.isAntiAlias = true;
-    bitmapPaint.color = Color.fromARGB(alpha, 0, 0, 0);
+    // 重用Paint对象
+    _bitmapPaint.filterQuality = filterQuality;
+    _bitmapPaint.color = Color.fromARGB(alpha, 0, 0, 0);
 
     Rect srcRect =
         Rect.fromLTRB(0, 0, bitmap.width.toDouble(), bitmap.height.toDouble());
     Rect dstRect = frameRect;
-    canvas.drawImageRect(bitmap, srcRect, dstRect, bitmapPaint);
+    canvas.drawImageRect(bitmap, srcRect, dstRect, _bitmapPaint);
     drawTextOnBitmap(canvas, imageKey, frameRect, alpha);
   }
 
@@ -160,57 +230,52 @@ class _SVGAPainter extends CustomPainter {
 
       final fill = shape.styles.fill;
       if (fill.isInitialized()) {
-        final paint = Paint();
-        paint.isAntiAlias = true;
-        paint.style = PaintingStyle.fill;
-        paint.color = Color.fromARGB(
+        _fillPaint.color = Color.fromARGB(
           (fill.a * frameAlpha).toInt(),
           (fill.r * 255).toInt(),
           (fill.g * 255).toInt(),
           (fill.b * 255).toInt(),
         );
-        canvas.drawPath(path, paint);
+        canvas.drawPath(path, _fillPaint);
       }
       final strokeWidth = shape.styles.strokeWidth;
       if (strokeWidth > 0) {
-        final paint = Paint();
-        paint.style = PaintingStyle.stroke;
         if (shape.styles.stroke.isInitialized()) {
-          paint.color = Color.fromARGB(
+          _strokePaint.color = Color.fromARGB(
             (shape.styles.stroke.a * frameAlpha).toInt(),
             (shape.styles.stroke.r * 255).toInt(),
             (shape.styles.stroke.g * 255).toInt(),
             (shape.styles.stroke.b * 255).toInt(),
           );
         }
-        paint.strokeWidth = strokeWidth;
+        _strokePaint.strokeWidth = strokeWidth;
         final lineCap = shape.styles.lineCap;
         switch (lineCap) {
           case ShapeEntity_ShapeStyle_LineCap.LineCap_BUTT:
-            paint.strokeCap = StrokeCap.butt;
+            _strokePaint.strokeCap = StrokeCap.butt;
             break;
           case ShapeEntity_ShapeStyle_LineCap.LineCap_ROUND:
-            paint.strokeCap = StrokeCap.round;
+            _strokePaint.strokeCap = StrokeCap.round;
             break;
           case ShapeEntity_ShapeStyle_LineCap.LineCap_SQUARE:
-            paint.strokeCap = StrokeCap.square;
+            _strokePaint.strokeCap = StrokeCap.square;
             break;
           default:
         }
         final lineJoin = shape.styles.lineJoin;
         switch (lineJoin) {
           case ShapeEntity_ShapeStyle_LineJoin.LineJoin_MITER:
-            paint.strokeJoin = StrokeJoin.miter;
+            _strokePaint.strokeJoin = StrokeJoin.miter;
             break;
           case ShapeEntity_ShapeStyle_LineJoin.LineJoin_ROUND:
-            paint.strokeJoin = StrokeJoin.round;
+            _strokePaint.strokeJoin = StrokeJoin.round;
             break;
           case ShapeEntity_ShapeStyle_LineJoin.LineJoin_BEVEL:
-            paint.strokeJoin = StrokeJoin.bevel;
+            _strokePaint.strokeJoin = StrokeJoin.bevel;
             break;
           default:
         }
-        paint.strokeMiterLimit = shape.styles.miterLimit;
+        _strokePaint.strokeMiterLimit = shape.styles.miterLimit;
         List<double> lineDash = [
           shape.styles.lineDashI,
           shape.styles.lineDashII,
@@ -226,9 +291,9 @@ class _SVGAPainter extends CustomPainter {
                 ]),
                 dashOffset: DashOffset.absolute(lineDash[2]),
               ),
-              paint);
+              _strokePaint);
         } else {
-          canvas.drawPath(path, paint);
+          canvas.drawPath(path, _strokePaint);
         }
       }
       if (shape.hasTransform()) {
@@ -268,9 +333,11 @@ class _SVGAPainter extends CustomPainter {
   }
 
   Path buildDPath(String argD, {Path? path}) {
+    // 优化路径缓存机制
     if (videoItem.pathCache[argD] != null) {
-      return videoItem.pathCache[argD]!;
+      return Path.from(videoItem.pathCache[argD]!);
     }
+    
     path ??= Path();
     final d = argD.replaceAllMapped(RegExp('([a-df-zA-Z])'), (match) {
       return "|||${match.group(1)} ";
@@ -281,9 +348,11 @@ class _SVGAPainter extends CustomPainter {
     double? currentPointY1;
     double? currentPointX2;
     double? currentPointY2;
-    d.split("|||").forEach((segment) {
+    
+    final segments = d.split("|||");
+    for (final segment in segments) {
       if (segment.isEmpty) {
-        return;
+        continue;
       }
       final firstLetter = segment.substring(0, 1);
       if (_validMethods.contains(firstLetter)) {
@@ -291,31 +360,31 @@ class _SVGAPainter extends CustomPainter {
         if (firstLetter == "M") {
           currentPointX = double.parse(args[0]);
           currentPointY = double.parse(args[1]);
-          path!.moveTo(currentPointX, currentPointY);
+          path.moveTo(currentPointX, currentPointY);
         } else if (firstLetter == "m") {
           currentPointX += double.parse(args[0]);
           currentPointY += double.parse(args[1]);
-          path!.moveTo(currentPointX, currentPointY);
+          path.moveTo(currentPointX, currentPointY);
         } else if (firstLetter == "L") {
           currentPointX = double.parse(args[0]);
           currentPointY = double.parse(args[1]);
-          path!.lineTo(currentPointX, currentPointY);
+          path.lineTo(currentPointX, currentPointY);
         } else if (firstLetter == "l") {
           currentPointX += double.parse(args[0]);
           currentPointY += double.parse(args[1]);
-          path!.lineTo(currentPointX, currentPointY);
+          path.lineTo(currentPointX, currentPointY);
         } else if (firstLetter == "H") {
           currentPointX = double.parse(args[0]);
-          path!.lineTo(currentPointX, currentPointY);
+          path.lineTo(currentPointX, currentPointY);
         } else if (firstLetter == "h") {
           currentPointX += double.parse(args[0]);
-          path!.lineTo(currentPointX, currentPointY);
+          path.lineTo(currentPointX, currentPointY);
         } else if (firstLetter == "V") {
           currentPointY = double.parse(args[0]);
-          path!.lineTo(currentPointX, currentPointY);
+          path.lineTo(currentPointX, currentPointY);
         } else if (firstLetter == "v") {
           currentPointY += double.parse(args[0]);
-          path!.lineTo(currentPointX, currentPointY);
+          path.lineTo(currentPointX, currentPointY);
         } else if (firstLetter == "C") {
           currentPointX1 = double.parse(args[0]);
           currentPointY1 = double.parse(args[1]);
@@ -323,11 +392,11 @@ class _SVGAPainter extends CustomPainter {
           currentPointY2 = double.parse(args[3]);
           currentPointX = double.parse(args[4]);
           currentPointY = double.parse(args[5]);
-          path!.cubicTo(
-            currentPointX1!,
-            currentPointY1!,
-            currentPointX2!,
-            currentPointY2!,
+          path.cubicTo(
+            currentPointX1,
+            currentPointY1,
+            currentPointX2,
+            currentPointY2,
             currentPointX,
             currentPointY,
           );
@@ -338,11 +407,11 @@ class _SVGAPainter extends CustomPainter {
           currentPointY2 = currentPointY + double.parse(args[3]);
           currentPointX += double.parse(args[4]);
           currentPointY += double.parse(args[5]);
-          path!.cubicTo(
-            currentPointX1!,
-            currentPointY1!,
-            currentPointX2!,
-            currentPointY2!,
+          path.cubicTo(
+            currentPointX1,
+            currentPointY1,
+            currentPointX2,
+            currentPointY2,
             currentPointX,
             currentPointY,
           );
@@ -351,17 +420,17 @@ class _SVGAPainter extends CustomPainter {
               currentPointY1 != null &&
               currentPointX2 != null &&
               currentPointY2 != null) {
-            currentPointX1 = currentPointX - currentPointX2! + currentPointX;
-            currentPointY1 = currentPointY - currentPointY2! + currentPointY;
+            currentPointX1 = currentPointX - currentPointX2 + currentPointX;
+            currentPointY1 = currentPointY - currentPointY2 + currentPointY;
             currentPointX2 = double.parse(args[0]);
             currentPointY2 = double.parse(args[1]);
             currentPointX = double.parse(args[2]);
             currentPointY = double.parse(args[3]);
-            path!.cubicTo(
-              currentPointX1!,
-              currentPointY1!,
-              currentPointX2!,
-              currentPointY2!,
+            path.cubicTo(
+              currentPointX1,
+              currentPointY1,
+              currentPointX2,
+              currentPointY2,
               currentPointX,
               currentPointY,
             );
@@ -370,25 +439,25 @@ class _SVGAPainter extends CustomPainter {
             currentPointY1 = double.parse(args[1]);
             currentPointX = double.parse(args[2]);
             currentPointY = double.parse(args[3]);
-            path!.quadraticBezierTo(
-                currentPointX1!, currentPointY1!, currentPointX, currentPointY);
+            path.quadraticBezierTo(
+                currentPointX1, currentPointY1, currentPointX, currentPointY);
           }
         } else if (firstLetter == "s") {
           if (currentPointX1 != null &&
               currentPointY1 != null &&
               currentPointX2 != null &&
               currentPointY2 != null) {
-            currentPointX1 = currentPointX - currentPointX2! + currentPointX;
-            currentPointY1 = currentPointY - currentPointY2! + currentPointY;
+            currentPointX1 = currentPointX - currentPointX2 + currentPointX;
+            currentPointY1 = currentPointY - currentPointY2 + currentPointY;
             currentPointX2 = currentPointX + double.parse(args[0]);
             currentPointY2 = currentPointY + double.parse(args[1]);
             currentPointX += double.parse(args[2]);
             currentPointY += double.parse(args[3]);
-            path!.cubicTo(
-              currentPointX1!,
-              currentPointY1!,
-              currentPointX2!,
-              currentPointY2!,
+            path.cubicTo(
+              currentPointX1,
+              currentPointY1,
+              currentPointX2,
+              currentPointY2,
               currentPointX,
               currentPointY,
             );
@@ -397,9 +466,9 @@ class _SVGAPainter extends CustomPainter {
             currentPointY1 = currentPointY + double.parse(args[1]);
             currentPointX += double.parse(args[2]);
             currentPointY += double.parse(args[3]);
-            path!.quadraticBezierTo(
-              currentPointX1!,
-              currentPointY1!,
+            path.quadraticBezierTo(
+              currentPointX1,
+              currentPointY1,
               currentPointX,
               currentPointY,
             );
@@ -409,25 +478,34 @@ class _SVGAPainter extends CustomPainter {
           currentPointY1 = double.parse(args[1]);
           currentPointX = double.parse(args[2]);
           currentPointY = double.parse(args[3]);
-          path!.quadraticBezierTo(
-              currentPointX1!, currentPointY1!, currentPointX, currentPointY);
+          path.quadraticBezierTo(
+              currentPointX1, currentPointY1, currentPointX, currentPointY);
         } else if (firstLetter == "q") {
           currentPointX1 = currentPointX + double.parse(args[0]);
           currentPointY1 = currentPointY + double.parse(args[1]);
           currentPointX += double.parse(args[2]);
           currentPointY += double.parse(args[3]);
-          path!.quadraticBezierTo(
-            currentPointX1!,
-            currentPointY1!,
+          path.quadraticBezierTo(
+            currentPointX1,
+            currentPointY1,
             currentPointX,
             currentPointY,
           );
         } else if (firstLetter == "Z" || firstLetter == "z") {
-          path!.close();
+          path.close();
         }
       }
-      videoItem.pathCache[argD] = path!;
-    });
+    }
+    
+    // 限制路径缓存大小，防止内存无限增长
+    if (videoItem.pathCache.length > 100) {
+      final keys = videoItem.pathCache.keys.take(50).toList();
+      for (final key in keys) {
+        videoItem.pathCache.remove(key);
+      }
+    }
+    
+    videoItem.pathCache[argD] = Path.from(path);
     return path;
   }
 
@@ -449,15 +527,10 @@ class _SVGAPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SVGAPainter oldDelegate) {
-    if (controller._canvasNeedsClear == true) {
-      return true;
-    }
-
-    return !(oldDelegate.controller == controller &&
-        oldDelegate.controller.videoItem == controller.videoItem &&
-        oldDelegate.fit == fit &&
-        oldDelegate.filterQuality == filterQuality &&
-        oldDelegate.clipRect == clipRect);
+  bool shouldRepaint(covariant _SVGAPainter oldDelegate) {
+    return controller != oldDelegate.controller ||
+        fit != oldDelegate.fit ||
+        filterQuality != oldDelegate.filterQuality ||
+        clipRect != oldDelegate.clipRect;
   }
 }

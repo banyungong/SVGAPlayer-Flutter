@@ -10,6 +10,7 @@ import 'package:path_drawing/path_drawing.dart';
 import 'package:svgaplayer_flutter/proto/svga.pb.dart';
 
 import 'parser.dart';
+import 'performance_manager.dart';
 // ignore: import_of_legacy_library_into_null_safe
 import 'proto/svga.pbserver.dart';
 
@@ -57,13 +58,20 @@ class SVGAImage extends StatefulWidget {
   }
 }
 
-class SVGAAnimationController extends AnimationController {
+class SVGAAnimationController extends AnimationController with SVGAPerformanceMonitor {
   MovieEntity? _videoItem;
   bool _canvasNeedsClear = false;
+  
+  // 缓存计算结果，避免重复计算
+  int _lastFrame = -1;
+  int _cachedFrame = 0;
+  bool _isFrameDirty = true;
 
   SVGAAnimationController({
     required super.vsync,
-  }) : super(duration: Duration.zero);
+  }) : super(duration: Duration.zero) {
+    initializePerformanceMonitoring();
+  }
 
   set videoItem(MovieEntity? value) {
     assert(!_isDisposed, '$this has been disposed!');
@@ -79,6 +87,8 @@ class SVGAAnimationController extends AnimationController {
     }
     _videoItem = value;
     if (value != null) {
+      // 记录内存使用
+      recordMemoryUsage(value.hashCode.toString(), value.estimateMemoryUsage());
       final movieParams = value.params;
       assert(
           movieParams.viewBoxWidth >= 0 &&
@@ -94,6 +104,9 @@ class SVGAAnimationController extends AnimationController {
     } else {
       duration = Duration.zero;
     }
+    // 重置缓存
+    _lastFrame = -1;
+    _isFrameDirty = true;
     // reset progress after videoitem changed
     reset();
   }
@@ -104,10 +117,18 @@ class SVGAAnimationController extends AnimationController {
   int get currentFrame {
     final videoItem = _videoItem;
     if (videoItem == null) return 0;
-    return min(
-      videoItem.params.frames - 1,
-      max(0, (videoItem.params.frames.toDouble() * value).toInt()),
-    );
+    
+    // 优化：避免重复计算当前帧
+    final currentValue = value;
+    if (_lastFrame != currentValue.hashCode || _isFrameDirty) {
+      _cachedFrame = min(
+        videoItem.params.frames - 1,
+        max(0, (videoItem.params.frames.toDouble() * currentValue).toInt()),
+      );
+      _lastFrame = currentValue.hashCode;
+      _isFrameDirty = false;
+    }
+    return _cachedFrame;
   }
 
   /// Total frames of [videoItem], returns 0 if [videoItem] is null.
@@ -120,6 +141,7 @@ class SVGAAnimationController extends AnimationController {
   /// mark [_SVGAPainter] needs clear
   void clear() {
     _canvasNeedsClear = true;
+    _isFrameDirty = true;
     if (!_isDisposed) notifyListeners();
   }
 
@@ -127,7 +149,30 @@ class SVGAAnimationController extends AnimationController {
   TickerFuture forward({double? from}) {
     assert(_videoItem != null,
         'SVGAAnimationController.forward() called after dispose()?');
+    _isFrameDirty = true;
     return super.forward(from: from);
+  }
+  
+  @override
+  TickerFuture reverse({double? from}) {
+    assert(_videoItem != null,
+        'SVGAAnimationController.reverse() called after dispose()?');
+    _isFrameDirty = true;
+    return super.reverse(from: from);
+  }
+  
+  @override
+  TickerFuture repeat({int? count, double? min, double? max, Duration? period, bool reverse = false}) {
+    assert(_videoItem != null,
+        'SVGAAnimationController.repeat() called after dispose()?');
+    _isFrameDirty = true;
+    return super.repeat(count: count, min: min, max: max, period: period, reverse: reverse);
+  }
+  
+  @override
+  void reset() {
+    _isFrameDirty = true;
+    super.reset();
   }
 
   bool _isDisposed = false;
@@ -136,6 +181,7 @@ class SVGAAnimationController extends AnimationController {
     // auto dispose _videoItem when set null
     videoItem = null;
     _isDisposed = true;
+    disposePerformanceMonitoring();
     super.dispose();
   }
 }
