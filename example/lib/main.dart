@@ -155,7 +155,7 @@ class _SVGASampleScreenState extends State<SVGASampleScreen>
           Container(
               padding: const EdgeInsets.all(8.0),
               child: Text("Url: ${widget.image}",
-                  style: Theme.of(context).textTheme.subtitle2)),
+                  style: Theme.of(context).textTheme.titleSmall)),
           if (isLoading) LinearProgressIndicator(),
           Center(
             child: ColoredBox(
