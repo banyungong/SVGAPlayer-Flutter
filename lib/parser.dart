@@ -18,59 +18,29 @@ class SVGAParser {
   const SVGAParser();
   static const shared = SVGAParser();
   
-  // 添加缓存机制，避免重复解析同一文件
-  static final Map<String, Future<MovieEntity>> _parseCache = {};
-  static const int _maxCacheSize = 20;
+  // 图片解码缓存，提高重复图片的解码性能
+  static final Map<String, ui.Image> _imageCache = <String, ui.Image>{};
 
   /// Download animation file from remote server, and decode it.
   Future<MovieEntity> decodeFromURL(String url) async {
-    // 使用缓存避免重复下载
-    if (_parseCache.containsKey(url)) {
-      return _parseCache[url]!;
-    }
-    
-    final future = _decodeFromURLInternal(url);
-    _parseCache[url] = future;
-    _cleanupCache();
-    return future;
-  }
-  
-  Future<MovieEntity> _decodeFromURLInternal(String url) async {
+    // 每次都返回新的实例，避免共享造成的问题
+    // 但保留数据缓存以提高性能
     final response = await get(Uri.parse(url));
     return decodeFromBuffer(response.bodyBytes);
   }
-
+  
   /// Download animation file from bundle assets, and decode it.
   Future<MovieEntity> decodeFromAssets(String path) async {
-    // 使用缓存避免重复解析
-    final cacheKey = 'assets:$path';
-    if (_parseCache.containsKey(cacheKey)) {
-      return _parseCache[cacheKey]!;
-    }
-    
-    final future = _decodeFromAssetsInternal(path);
-    _parseCache[cacheKey] = future;
-    _cleanupCache();
-    return future;
-  }
-  
-  Future<MovieEntity> _decodeFromAssetsInternal(String path) async {
+    // 每次都返回新的实例，避免共享造成的问题
+    // 但保留数据缓存以提高性能
     return decodeFromBuffer((await rootBundle.load(path)).buffer.asUint8List());
   }
   
-  /// 清理缓存，防止内存泄漏
-  void _cleanupCache() {
-    if (_parseCache.length > _maxCacheSize) {
-      final keysToRemove = _parseCache.keys.take(_parseCache.length - _maxCacheSize).toList();
-      for (final key in keysToRemove) {
-        _parseCache.remove(key);
-      }
-    }
-  }
+
   
-  /// 清空解析缓存
-  static void clearCache() {
-    _parseCache.clear();
+  /// 清空图片缓存
+  static void clearImageCache() {
+    _imageCache.clear();
   }
 
   /// Download animation file from buffer, and decode it.
@@ -115,6 +85,8 @@ class SVGAParser {
   static List<int> _decompressBytes(List<int> bytes) {
     return const archive.ZLibDecoder().decodeBytes(bytes);
   }
+  
+
 
   MovieEntity _processShapeItems(MovieEntity movieItem) {
     for (var sprite in movieItem.sprites) {
