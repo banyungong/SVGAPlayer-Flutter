@@ -191,15 +191,34 @@ class _SVGAPainter extends CustomPainter {
         videoItem.bitmapCache[imageKey];
     if (bitmap == null) return;
 
-    // 重用Paint对象
-    _bitmapPaint.filterQuality = filterQuality;
-    _bitmapPaint.color = Color.fromARGB(alpha, 0, 0, 0);
+    // 检查图片是否已经被释放
+    try {
+      // 通过访问width属性来检查图片是否有效
+      final width = bitmap.width;
+      final height = bitmap.height;
+      if (width <= 0 || height <= 0) {
+        return;
+      }
 
-    Rect srcRect =
-        Rect.fromLTRB(0, 0, bitmap.width.toDouble(), bitmap.height.toDouble());
-    Rect dstRect = frameRect;
-    canvas.drawImageRect(bitmap, srcRect, dstRect, _bitmapPaint);
-    drawTextOnBitmap(canvas, imageKey, frameRect, alpha);
+      // 重用Paint对象
+      _bitmapPaint.filterQuality = filterQuality;
+      _bitmapPaint.color = Color.fromARGB(alpha, 0, 0, 0);
+
+      Rect srcRect = Rect.fromLTRB(0, 0, width.toDouble(), height.toDouble());
+      Rect dstRect = frameRect;
+      canvas.drawImageRect(bitmap, srcRect, dstRect, _bitmapPaint);
+      drawTextOnBitmap(canvas, imageKey, frameRect, alpha);
+    } catch (e) {
+      // 如果图片已经被释放或无效，跳过绘制
+      if (kDebugMode) {
+        print('drawBitmap error for $imageKey: $e');
+      }
+      // 尝试从bitmapCache中移除无效的图片引用
+      if (videoItem.bitmapCache.containsKey(imageKey)) {
+        videoItem.bitmapCache.remove(imageKey);
+      }
+      return;
+    }
   }
 
   void drawShape(Canvas canvas, List<ShapeEntity> shapes, int frameAlpha) {

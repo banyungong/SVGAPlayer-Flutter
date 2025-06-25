@@ -195,9 +195,17 @@ class SVGAParser {
       final index = spritesToRemove[i];
       final sprite = movieItem.sprites.removeAt(index);
       
-      // 同时移除对应的图片资源
-      if (sprite.imageKey.isNotEmpty) {
-        movieItem.images.remove(sprite.imageKey);
+      // 检查是否还有其他精灵使用相同的图片资源
+      final imageKey = sprite.imageKey;
+      if (imageKey.isNotEmpty) {
+        final stillInUse = movieItem.sprites.any((s) => s.imageKey == imageKey);
+        if (!stillInUse) {
+          // 只有在没有其他精灵使用时才移除图片资源
+          movieItem.images.remove(imageKey);
+          _optimizationConfig.log('移除未使用的图片资源: $imageKey');
+        } else {
+          _optimizationConfig.log('图片资源仍在使用，保留: $imageKey');
+        }
       }
     }
     
@@ -309,6 +317,7 @@ class SVGAParser {
       if (task != null) {
         task.finish(arguments: {'error': '$e', 'stack': '$stack'});
       }
+      print('SVGAParser._decodeImageItem: 解码图片失败: $e');
       assert(() {
         FlutterError.reportError(FlutterErrorDetails(
           exception: e,
@@ -327,28 +336,40 @@ class SVGAParser {
   
   /// 压缩图片
   Future<ui.Image> _compressImage(ui.Image originalImage, ui.Size targetSize) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(recorder);
-    
-    // 使用高质量的图片缩放
-    final paint = ui.Paint()
-      ..filterQuality = ui.FilterQuality.high;
-    
-    // 将原图绘制到目标尺寸
-    canvas.drawImageRect(
-      originalImage,
-      ui.Rect.fromLTWH(0, 0, originalImage.width.toDouble(), originalImage.height.toDouble()),
-      ui.Rect.fromLTWH(0, 0, targetSize.width, targetSize.height),
-      paint,
-    );
-    
-    final picture = recorder.endRecording();
-    final compressedImage = await picture.toImage(
-      targetSize.width.toInt(),
-      targetSize.height.toInt(),
-    );
-    
-    picture.dispose();
-    return compressedImage;
+    try {
+      // 验证输入参数
+      if (targetSize.width <= 0 || targetSize.height <= 0) {
+        _optimizationConfig.log('压缩图片失败: 目标尺寸无效 ${targetSize.width}x${targetSize.height}');
+        return originalImage;
+      }
+      
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      
+      // 使用高质量的图片缩放
+      final paint = ui.Paint()
+        ..filterQuality = ui.FilterQuality.high;
+      
+      // 将原图绘制到目标尺寸
+      canvas.drawImageRect(
+        originalImage,
+        ui.Rect.fromLTWH(0, 0, originalImage.width.toDouble(), originalImage.height.toDouble()),
+        ui.Rect.fromLTWH(0, 0, targetSize.width, targetSize.height),
+        paint,
+      );
+      
+      final picture = recorder.endRecording();
+      final compressedImage = await picture.toImage(
+        targetSize.width.toInt(),
+        targetSize.height.toInt(),
+      );
+      
+      picture.dispose();
+      return compressedImage;
+    } catch (e) {
+      _optimizationConfig.log('压缩图片失败: $e');
+      // 如果压缩失败，返回原图
+      return originalImage;
+    }
   }
 }

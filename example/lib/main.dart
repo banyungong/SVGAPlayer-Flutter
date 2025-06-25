@@ -12,6 +12,7 @@ import 'dynamic_content_test.dart';
 import 'network_test.dart';
 import 'comparison_test.dart';
 import 'optimization_test.dart';
+import 'multiple_test1_test.dart';
 import 'cache_test.dart';
 import 'memory_check_test.dart';
 
@@ -201,6 +202,13 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.tune,
       color: Colors.deepOrange,
       builder: (context) => OptimizationTestScreen(),
+    ),
+    TestCategory(
+      title: '多实例崩溃测试',
+      description: '专门测试多个test1.svga实例的崩溃问题',
+      icon: Icons.warning,
+      color: Colors.red,
+      builder: (context) => MultipleTest1TestScreen(),
     ),
   ];
 
