@@ -12,6 +12,7 @@ import 'package:http/http.dart' show get;
 // ignore: import_of_legacy_library_into_null_safe
 import 'proto/svga.pbserver.dart';
 import 'svga_cache.dart';
+import 'svga_config.dart';
 
 const _filterKey = 'SVGAParser';
 
@@ -22,6 +23,18 @@ class SVGAParser {
   
   // LRU缓存实例，默认50MB，最多100个文件
   static final SVGACache _cache = SVGACache();
+  
+  // 优化配置，默认使用平衡模式
+  static SVGAOptimizationConfig _optimizationConfig = SVGAOptimizationConfig.balanced;
+  
+  /// 设置优化配置
+  static void setOptimizationConfig(SVGAOptimizationConfig config) {
+    _optimizationConfig = config;
+    config.log('SVGA优化配置已更新: ${config.runtimeType}');
+  }
+  
+  /// 获取当前优化配置
+  static SVGAOptimizationConfig get optimizationConfig => _optimizationConfig;
 
   /// Download animation file from remote server, and decode it.
   Future<MovieEntity> decodeFromURL(String url) async {
@@ -123,6 +136,7 @@ class SVGAParser {
 
 
   MovieEntity _processShapeItems(MovieEntity movieItem) {
+    // 先处理形状继承
     for (var sprite in movieItem.sprites) {
       List<ShapeEntity>? lastShape;
       for (var frame in sprite.frames) {
@@ -136,7 +150,85 @@ class SVGAParser {
         }
       }
     }
+    
+    // 精灵过滤优化
+    if (_optimizationConfig.enableSpriteFiltering) {
+      movieItem = _filterSprites(movieItem);
+    }
+    
+    // 音频过滤优化
+    if (!_optimizationConfig.loadAudio) {
+      movieItem.audios.clear();
+      _optimizationConfig.log('已移除所有音频数据');
+    }
+    
     return movieItem;
+  }
+  
+  /// 过滤超大精灵
+  MovieEntity _filterSprites(MovieEntity movieItem) {
+    final originalSpriteCount = movieItem.sprites.length;
+    final spritesToRemove = <int>[];
+    
+    for (int i = 0; i < movieItem.sprites.length; i++) {
+      final sprite = movieItem.sprites[i];
+      
+      // 检查精灵的图片资源
+      if (sprite.imageKey.isNotEmpty && movieItem.images.containsKey(sprite.imageKey)) {
+        final imageData = movieItem.images[sprite.imageKey]!;
+        
+        // 估算解码后的内存占用
+        // 这里使用一个简单的估算：假设图片是方形的，根据文件大小推算
+        final estimatedMemory = _estimateSpriteMemory(imageData, sprite);
+        
+        if (estimatedMemory > _optimizationConfig.maxSpriteMemoryBytes) {
+          spritesToRemove.add(i);
+          _optimizationConfig.log(
+            '精灵 ${sprite.imageKey} 预估内存过大 (${_optimizationConfig.formatBytes(estimatedMemory)})，已丢弃'
+          );
+        }
+      }
+    }
+    
+    // 从后往前删除，避免索引变化
+    for (int i = spritesToRemove.length - 1; i >= 0; i--) {
+      final index = spritesToRemove[i];
+      final sprite = movieItem.sprites.removeAt(index);
+      
+      // 同时移除对应的图片资源
+      if (sprite.imageKey.isNotEmpty) {
+        movieItem.images.remove(sprite.imageKey);
+      }
+    }
+    
+    if (spritesToRemove.isNotEmpty) {
+      _optimizationConfig.log(
+        '精灵过滤完成: 原有${originalSpriteCount}个，丢弃${spritesToRemove.length}个，保留${movieItem.sprites.length}个'
+      );
+    }
+    
+    return movieItem;
+  }
+  
+  /// 估算精灵内存占用
+  int _estimateSpriteMemory(List<int> imageData, SpriteEntity sprite) {
+    // 基于文件大小的粗略估算
+    // 一般来说，解码后的图片内存是文件大小的数倍到数十倍
+    final fileSize = imageData.length;
+    
+    // 根据文件大小估算解码后的尺寸
+    // 这是一个经验公式，可以根据实际情况调整
+    int estimatedPixels;
+    if (fileSize < 50 * 1024) { // 小于50KB
+      estimatedPixels = fileSize * 50; // 假设压缩比1:50
+    } else if (fileSize < 200 * 1024) { // 小于200KB
+      estimatedPixels = fileSize * 100; // 假设压缩比1:100
+    } else { // 大文件
+      estimatedPixels = fileSize * 200; // 假设压缩比1:200
+    }
+    
+    // RGBA = 4字节每像素
+    return estimatedPixels * 4;
   }
 
   Future<MovieEntity> _prepareResources(MovieEntity movieItem,
@@ -172,17 +264,47 @@ class SVGAParser {
         ..start('DecodeImage', arguments: {'key': key, 'length': bytes.length});
     }
     try {
-      final image = await decodeImageFromList(bytes);
+      // 先解码获取原始尺寸
+      final originalImage = await decodeImageFromList(bytes);
+      
+      // 检查是否需要丢弃
+      if (_optimizationConfig.shouldDiscardImage(originalImage.width, originalImage.height)) {
+        final memoryMB = _optimizationConfig.calculateImageMemory(originalImage.width, originalImage.height);
+        _optimizationConfig.log(
+          '图片 $key 内存过大 (${originalImage.width}x${originalImage.height}, ${_optimizationConfig.formatBytes(memoryMB)})，已丢弃'
+        );
+        originalImage.dispose();
+        return null;
+      }
+      
+      ui.Image? finalImage = originalImage;
+      
+      // 检查是否需要压缩
+      if (_optimizationConfig.shouldCompressImage(originalImage.width, originalImage.height)) {
+        final targetSize = _optimizationConfig.calculateCompressedSize(originalImage.width, originalImage.height);
+        
+        _optimizationConfig.log(
+          '压缩图片 $key: ${originalImage.width}x${originalImage.height} -> ${targetSize.width.toInt()}x${targetSize.height.toInt()}'
+        );
+        
+        // 执行图片压缩
+        finalImage = await _compressImage(originalImage, targetSize);
+        originalImage.dispose(); // 释放原始图片
+      }
+      
       if (task != null) {
         task.finish(
-          arguments: {'imageSize': '${image.width}x${image.height}'},
+          arguments: {
+            'imageSize': '${finalImage.width}x${finalImage.height}',
+            'compressed': finalImage != originalImage,
+          },
         );
       }
       
-      // 将解码的图片加入缓存
-      _cache.putImage(bytes, image);
+      // 将处理后的图片加入缓存
+      _cache.putImage(bytes, finalImage);
       
-      return image;
+      return finalImage;
     } catch (e, stack) {
       if (task != null) {
         task.finish(arguments: {'error': '$e', 'stack': '$stack'});
@@ -201,5 +323,32 @@ class SVGAParser {
       }());
       return null;
     }
+  }
+  
+  /// 压缩图片
+  Future<ui.Image> _compressImage(ui.Image originalImage, ui.Size targetSize) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    
+    // 使用高质量的图片缩放
+    final paint = ui.Paint()
+      ..filterQuality = ui.FilterQuality.high;
+    
+    // 将原图绘制到目标尺寸
+    canvas.drawImageRect(
+      originalImage,
+      ui.Rect.fromLTWH(0, 0, originalImage.width.toDouble(), originalImage.height.toDouble()),
+      ui.Rect.fromLTWH(0, 0, targetSize.width, targetSize.height),
+      paint,
+    );
+    
+    final picture = recorder.endRecording();
+    final compressedImage = await picture.toImage(
+      targetSize.width.toInt(),
+      targetSize.height.toInt(),
+    );
+    
+    picture.dispose();
+    return compressedImage;
   }
 }

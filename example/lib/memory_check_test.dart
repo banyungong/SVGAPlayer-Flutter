@@ -114,7 +114,7 @@ class _MemoryCheckTestState extends State<MemoryCheckTest>
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(16),
-            color: Colors.purple.withOpacity(0.1),
+                          color: Colors.purple.withValues(alpha: 0.1),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -197,7 +197,7 @@ class _MemoryCheckTestState extends State<MemoryCheckTest>
             padding: EdgeInsets.all(16),
             margin: EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
+              color: Colors.blue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.blue),
             ),

@@ -4,3 +4,4 @@ export 'proto/svga.pb.dart' show MovieEntity, MovieParams, ShapeEntity, FrameEnt
 export 'dynamic_entity.dart';
 export 'performance_manager.dart';
 export 'svga_cache.dart';
+export 'svga_config.dart';

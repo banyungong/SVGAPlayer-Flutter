@@ -11,6 +11,7 @@ import 'edge_cases_test.dart';
 import 'dynamic_content_test.dart';
 import 'network_test.dart';
 import 'comparison_test.dart';
+import 'optimization_test.dart';
 import 'cache_test.dart';
 import 'memory_check_test.dart';
 
@@ -193,6 +194,13 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.compare,
       color: Colors.indigo,
       builder: (context) => ComparisonTestScreen(),
+    ),
+    TestCategory(
+      title: '内存优化测试',
+      description: '精灵过滤、图片压缩和音效控制测试',
+      icon: Icons.tune,
+      color: Colors.deepOrange,
+      builder: (context) => OptimizationTestScreen(),
     ),
   ];
 
