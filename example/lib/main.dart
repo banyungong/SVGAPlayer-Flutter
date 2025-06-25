@@ -3,81 +3,194 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 
+// 导入各种测试页面
+import 'basic_sample.dart';
+import 'performance_test.dart';
+import 'memory_test.dart';
+import 'edge_cases_test.dart';
+import 'dynamic_content_test.dart';
+import 'network_test.dart';
+import 'comparison_test.dart';
+
 void main() => runApp(ExampleApp());
 
 class ExampleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(theme: ThemeData.dark(), home: HomeScreen());
+    return MaterialApp(
+      title: 'SVGA Flutter 完整测试',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      darkTheme: ThemeData.dark(),
+      home: HomeScreen(),
+    );
   }
 }
 
 class HomeScreen extends StatelessWidget {
-  final samples = const <String>[
-    "assets/angel.svga",
-    "assets/pin_jump.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/EmptyState.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/HamburgerArrow.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/PinJump.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/TwitterHeart.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/Walkthrough.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/kingset.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/halloween.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/heartbeat.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/matteBitmap.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/matteBitmap_1.x.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/matteRect.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/mutiMatte.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/posche.svga",
-    "https://cdn.jsdelivr.net/gh/svga/SVGA-Samples@master/rose.svga",
-  ].map((e) => [e.split('/').last, e]).toList(growable: false);
-
-  // callback for register dynamicItem
-  final dynamicSamples = <String, void Function(MovieEntity entity)>{
-    "kingset.svga": (entity) => entity.dynamicItem
-      ..setText(
-          TextPainter(
-              text: TextSpan(
-                  text: "Hello, World!",
-                  style: TextStyle(
-                    fontSize: 28,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ))),
-          "banner")
-    // ..setImageWithUrl(
-    //     "https://github.com/PonyCui/resources/blob/master/svga_replace_avatar.png?raw=true",
-    //     "99")
-    // ..setDynamicDrawer((canvas, frameIndex) {
-    //   canvas.drawRect(Rect.fromLTWH(0, 0, 88, 88),
-    //       Paint()..color = Colors.red); // draw by yourself.
-    // }, "banner"),
-  };
+  // 定义各种测试场景
+  final List<TestCategory> testCategories = [
+    TestCategory(
+      title: '基础功能测试',
+      description: '基本的SVGA播放功能测试',
+      icon: Icons.play_circle_outline,
+      color: Colors.blue,
+      builder: (context) => BasicSampleScreen(),
+    ),
+    TestCategory(
+      title: '性能压力测试',
+      description: '多个动画同时播放的性能测试',
+      icon: Icons.speed,
+      color: Colors.orange,
+      builder: (context) => PerformanceTestScreen(),
+    ),
+    TestCategory(
+      title: '内存管理测试',
+      description: '内存使用和释放情况测试',
+      icon: Icons.memory,
+      color: Colors.green,
+      builder: (context) => MemoryTestScreen(),
+    ),
+    TestCategory(
+      title: '边界情况测试',
+      description: '异常情况和边界条件测试',
+      icon: Icons.bug_report,
+      color: Colors.red,
+      builder: (context) => EdgeCasesTestScreen(),
+    ),
+    TestCategory(
+      title: '动态内容测试',
+      description: '动态文本和图片替换测试',
+      icon: Icons.dynamic_form,
+      color: Colors.purple,
+      builder: (context) => DynamicContentTestScreen(),
+    ),
+    TestCategory(
+      title: '网络加载测试',
+      description: '网络SVGA文件加载测试',
+      icon: Icons.cloud_download,
+      color: Colors.teal,
+      builder: (context) => NetworkTestScreen(),
+    ),
+    TestCategory(
+      title: '对比测试',
+      description: '优化前后效果对比测试',
+      icon: Icons.compare,
+      color: Colors.indigo,
+      builder: (context) => ComparisonTestScreen(),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('SVGA Flutter Samples')),
-      body: ListView.separated(
-          itemCount: samples.length,
-          separatorBuilder: (_, __) => Divider(),
+      appBar: AppBar(
+        title: Text('SVGA Flutter 完整测试套件'),
+        elevation: 0,
+        backgroundColor: Theme.of(context).primaryColor,
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).primaryColor.withValues(alpha: 0.1),
+              Colors.transparent,
+            ],
+          ),
+        ),
+        child: ListView.builder(
+          padding: EdgeInsets.all(16),
+          itemCount: testCategories.length,
           itemBuilder: (context, index) {
-            return ListTile(
-                title: Text(samples[index].first),
-                subtitle: Text(samples[index].last),
-                onTap: () => _goToSample(context, samples[index]));
-          }),
+            final category = testCategories[index];
+            return Card(
+              margin: EdgeInsets.only(bottom: 16),
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: category.builder,
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: category.color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        child: Icon(
+                          category.icon,
+                          color: category.color,
+                          size: 30,
+                        ),
+                      ),
+                      SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              category.title,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              category.description,
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.grey[400],
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
+}
 
-  void _goToSample(context, List<String> sample) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) {
-      return SVGASampleScreen(
-          name: sample.first,
-          image: sample.last,
-          dynamicCallback: dynamicSamples[sample.first]);
-    }));
-  }
+class TestCategory {
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final Widget Function(BuildContext) builder;
+
+  TestCategory({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.builder,
+  });
 }
 
 class SVGASampleScreen extends StatefulWidget {

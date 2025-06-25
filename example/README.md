@@ -1,16 +1,155 @@
-# svgaplayer_flutter_example
+# SVGA Flutter 完整测试套件
 
-Demonstrates how to use the svgaplayer_flutter plugin.
+这是一个全面的 SVGA Flutter 测试示例工程，包含了多种测试场景，帮助开发者了解和测试 SVGA 播放器的各种功能。
 
-## Getting Started
+## 功能特性
 
-This project is a starting point for a Flutter application.
+### 🎯 基础功能测试
+- **文件**: `lib/basic_sample.dart`
+- **功能**: 测试基本的 SVGA 播放功能
+- **包含内容**:
+  - 本地资源文件播放（angel.svga, pin_jump.svga）
+  - 网络资源文件播放（多个在线 SVGA 样本）
+  - 动态内容支持（kingset.svga 的文本替换）
+  - 播放控制（播放/暂停、帧控制）
+  - 显示选项（图片质量、背景颜色、允许溢出等）
+  - 加载时间和播放次数统计
 
-A few resources to get you started if this is your first Flutter project:
+### ⚡ 性能压力测试
+- **文件**: `lib/performance_test.dart`
+- **功能**: 测试多个动画同时播放的性能
+- **包含内容**:
+  - 可调节的并发动画数量（1-20个）
+  - 实时 FPS 监控和图表显示
+  - 内存使用估算
+  - 网格布局显示多个动画实例
+  - 批量播放控制（全部播放/停止）
 
-- [Lab: Write your first Flutter app](https://flutter.io/docs/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://flutter.io/docs/cookbook)
+### 🧠 内存管理测试
+- **文件**: `lib/memory_test.dart`
+- **功能**: 测试内存使用和释放情况
+- **包含内容**:
+  - 动态创建和销毁 SVGA 实例
+  - 内存使用实时监控和图表
+  - 自动清理机制（可配置最大实例数）
+  - 实例生命周期管理
+  - 内存泄漏检测
 
-For help getting started with Flutter, view our 
-[online documentation](https://flutter.io/docs), which offers tutorials, 
-samples, guidance on mobile development, and a full API reference.
+### 🐛 边界情况测试
+- **文件**: `lib/edge_cases_test.dart`
+- **功能**: 测试异常情况和边界条件
+- **包含内容**:
+  - 无效文件路径测试
+  - 网络超时测试
+  - 重复释放控制器测试
+  - 极限尺寸播放器测试
+  - 快速切换文件测试
+  - 内存压力测试
+
+### 🎨 动态内容测试
+- **文件**: `lib/dynamic_content_test.dart`
+- **功能**: 测试动态文本和图片替换
+- **包含内容**:
+  - 动态文本替换
+  - 实时更新动态内容
+  - 自定义文本样式
+
+### 🌐 网络加载测试
+- **文件**: `lib/network_test.dart`
+- **功能**: 测试网络 SVGA 文件加载
+- **包含内容**:
+  - 多个网络 SVGA 样本
+  - 加载时间统计
+  - 网络错误处理
+  - 重新加载功能
+
+### 📊 对比测试
+- **文件**: `lib/comparison_test.dart`
+- **功能**: 优化前后效果对比
+- **包含内容**:
+  - 并排显示原始版本和优化版本
+  - 加载时间对比
+  - 内存使用对比
+  - 优化效果统计
+
+## 使用方法
+
+### 运行示例
+```bash
+cd example
+flutter run
+```
+
+### 编译 APK
+```bash
+cd example
+flutter build apk --debug
+```
+
+### 代码分析
+```bash
+cd example
+flutter analyze
+```
+
+## 测试建议
+
+### 基础功能测试
+1. 首先运行基础功能测试，确保各种 SVGA 文件能正常播放
+2. 测试不同的播放选项和控制功能
+3. 验证动态内容功能是否正常
+
+### 性能测试
+1. 逐步增加并发动画数量，观察 FPS 变化
+2. 监控内存使用情况
+3. 测试不同设备的性能表现
+
+### 稳定性测试
+1. 运行边界情况测试，确保异常处理正确
+2. 进行长时间内存管理测试
+3. 测试网络环境下的加载稳定性
+
+## 文件结构
+
+```
+example/
+├── lib/
+│   ├── main.dart                   # 主入口，测试套件首页
+│   ├── basic_sample.dart           # 基础功能测试
+│   ├── performance_test.dart       # 性能压力测试
+│   ├── memory_test.dart           # 内存管理测试
+│   ├── edge_cases_test.dart       # 边界情况测试
+│   ├── dynamic_content_test.dart  # 动态内容测试
+│   ├── network_test.dart          # 网络加载测试
+│   └── comparison_test.dart       # 对比测试
+├── assets/
+│   ├── angel.svga                 # 本地测试文件
+│   └── pin_jump.svga             # 本地测试文件
+└── README.md                      # 本文档
+```
+
+## 注意事项
+
+1. **网络测试**: 网络相关测试需要稳定的网络连接
+2. **性能测试**: 建议在真机上进行性能测试，模拟器结果可能不准确
+3. **内存测试**: 内存使用数据为估算值，实际内存使用可能有差异
+4. **边界测试**: 某些边界测试可能会故意触发错误，这是正常现象
+
+## 扩展开发
+
+如需添加新的测试场景：
+
+1. 在 `lib/` 目录下创建新的测试文件
+2. 在 `main.dart` 中的 `testCategories` 列表添加新的测试类别
+3. 实现相应的测试逻辑
+
+## 问题反馈
+
+如果在使用过程中遇到问题，请检查：
+1. Flutter 版本是否兼容
+2. 网络连接是否正常
+3. 设备存储空间是否充足
+
+---
+
+这个测试套件提供了全面的 SVGA Flutter 功能验证，帮助开发者更好地理解和使用 SVGA 播放器。
