@@ -111,7 +111,6 @@ class SVGACache {
       size += audio.audioKey.length * 2; // 音频键字符串
       size += 20; // 其他audio字段(5个int)
     }
-    
     return size;
   }
 

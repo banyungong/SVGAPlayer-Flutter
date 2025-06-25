@@ -31,6 +31,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
   final List<String> testFiles = [
     'assets/angel.svga',
     'assets/pin_jump.svga',
+    'assets/test1.svga',
   ];
   
   String selectedFile = 'assets/angel.svga';
