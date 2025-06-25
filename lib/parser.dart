@@ -1,6 +1,7 @@
 import 'dart:developer';
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart' as archive;
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import 'package:http/http.dart' show get;
 
 // ignore: import_of_legacy_library_into_null_safe
 import 'proto/svga.pbserver.dart';
+import 'svga_cache.dart';
 
 const _filterKey = 'SVGAParser';
 
@@ -18,33 +20,55 @@ class SVGAParser {
   const SVGAParser();
   static const shared = SVGAParser();
   
-  // 图片解码缓存，提高重复图片的解码性能
-  static final Map<String, ui.Image> _imageCache = <String, ui.Image>{};
+  // LRU缓存实例，默认50MB，最多100个文件
+  static final SVGACache _cache = SVGACache();
 
   /// Download animation file from remote server, and decode it.
   Future<MovieEntity> decodeFromURL(String url) async {
-    // 每次都返回新的实例，避免共享造成的问题
-    // 但保留数据缓存以提高性能
+    // 首先尝试从缓存获取
+    final cached = _cache.get(url);
+    if (cached != null) {
+      return cached;
+    }
+    
+    // 缓存未命中，下载并解析
     final response = await get(Uri.parse(url));
-    return decodeFromBuffer(response.bodyBytes);
+    return decodeFromBuffer(response.bodyBytes, cacheKey: url);
   }
   
   /// Download animation file from bundle assets, and decode it.
   Future<MovieEntity> decodeFromAssets(String path) async {
-    // 每次都返回新的实例，避免共享造成的问题
-    // 但保留数据缓存以提高性能
-    return decodeFromBuffer((await rootBundle.load(path)).buffer.asUint8List());
+    print('SVGAParser.decodeFromAssets: 请求加载 $path');
+    
+    // 首先尝试从缓存获取
+    final cached = _cache.get(path);
+    if (cached != null) {
+      print('SVGAParser.decodeFromAssets: 缓存命中，返回已存在的MovieEntity (hashCode: ${cached.hashCode})');
+      return cached;
+    }
+    
+    print('SVGAParser.decodeFromAssets: 缓存未命中，开始解析新的MovieEntity');
+    // 缓存未命中，从资产加载并解析
+    return decodeFromBuffer((await rootBundle.load(path)).buffer.asUint8List(), cacheKey: path);
   }
   
-
+  /// 获取缓存统计信息
+  static Map<String, dynamic> getCacheStats() {
+    return _cache.getStats();
+  }
   
-  /// 清空图片缓存
-  static void clearImageCache() {
-    _imageCache.clear();
+  /// 清空所有缓存
+  static void clearCache() {
+    _cache.clear();
+  }
+  
+  /// 清空过期缓存
+  static void clearExpiredCache(Duration maxAge) {
+    _cache.clearExpired(maxAge);
   }
 
   /// Download animation file from buffer, and decode it.
-  Future<MovieEntity> decodeFromBuffer(List<int> bytes) async {
+  Future<MovieEntity> decodeFromBuffer(List<int> bytes, {String? cacheKey}) async {
     TimelineTask? timeline;
     if (!kReleaseMode) {
       timeline = TimelineTask(filterKey: _filterKey)
@@ -64,10 +88,20 @@ class SVGAParser {
         timeline.instant('prepareResources()',
             arguments: {'images': movie.images.keys.join(',')});
       }
-      return await _prepareResources(
-        _processShapeItems(movie),
+      final processedMovie = _processShapeItems(movie);
+      final result = await _prepareResources(
+        processedMovie,
         timeline: timeline,
       );
+      
+      // 如果有缓存键，将结果加入缓存
+      if (cacheKey != null) {
+        log('SVGAParser.decodeFromBuffer: 将新解析的MovieEntity加入缓存 (hashCode: ${result.hashCode})');
+        _cache.put(cacheKey, result);
+      }
+      
+      log('SVGAParser.decodeFromBuffer: 返回MovieEntity (hashCode: ${result.hashCode})');
+      return result;
     } finally {
       if (timeline != null) timeline.finish();
     }
@@ -126,6 +160,12 @@ class SVGAParser {
 
   Future<ui.Image?> _decodeImageItem(String key, Uint8List bytes,
       {TimelineTask? timeline}) async {
+    // 首先尝试从图片缓存获取
+    final cachedImage = _cache.getImage(bytes);
+    if (cachedImage != null) {
+      return cachedImage;
+    }
+    
     TimelineTask? task;
     if (!kReleaseMode) {
       task = TimelineTask(filterKey: _filterKey, parent: timeline)
@@ -138,6 +178,10 @@ class SVGAParser {
           arguments: {'imageSize': '${image.width}x${image.height}'},
         );
       }
+      
+      // 将解码的图片加入缓存
+      _cache.putImage(bytes, image);
+      
       return image;
     } catch (e, stack) {
       if (task != null) {

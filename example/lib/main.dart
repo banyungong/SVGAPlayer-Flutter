@@ -11,6 +11,8 @@ import 'edge_cases_test.dart';
 import 'dynamic_content_test.dart';
 import 'network_test.dart';
 import 'comparison_test.dart';
+import 'cache_test.dart';
+import 'memory_check_test.dart';
 
 void main() => runApp(ExampleApp());
 
@@ -30,6 +32,103 @@ class ExampleApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatelessWidget {
+  // 清除缓存对话框
+  void _showClearCacheDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('清除缓存'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('确定要清除所有SVGA缓存吗？'),
+              SizedBox(height: 8),
+              Text(
+                '这将清除所有已缓存的SVGA文件和图片，下次加载时需要重新解析。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _clearAllCache(context);
+                Navigator.of(context).pop();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('清除'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 执行清除缓存
+  void _clearAllCache(BuildContext context) {
+    try {
+      // 获取清除前的缓存统计
+      final stats = SVGAParser.getCacheStats();
+      final beforeSize = stats['total']?['size_formatted'] ?? '0B';
+      final beforeCount = stats['svga_cache']?['count'] ?? 0;
+      
+      // 清除所有缓存
+      SVGAParser.clearCache();
+      
+      // 显示成功消息
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '缓存清除成功！\n清除了 $beforeCount 个缓存项，释放了 $beforeSize 内存',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      // 显示错误消息
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 8),
+              Text('清除缓存失败: $e'),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   // 定义各种测试场景
   final List<TestCategory> testCategories = [
     TestCategory(
@@ -38,6 +137,20 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.play_circle_outline,
       color: Colors.blue,
       builder: (context) => BasicSampleScreen(),
+    ),
+    TestCategory(
+      title: '缓存系统测试',
+      description: 'LRU缓存和资源复用效果测试',
+      icon: Icons.storage,
+      color: Colors.purple,
+      builder: (context) => CacheTestScreen(),
+    ),
+    TestCategory(
+      title: '内存复用验证',
+      description: '验证MovieEntity实例是否正确复用',
+      icon: Icons.check_circle,
+      color: Colors.cyan,
+      builder: (context) => MemoryCheckTest(),
     ),
     TestCategory(
       title: '性能压力测试',
@@ -90,6 +203,13 @@ class HomeScreen extends StatelessWidget {
         title: Text('SVGA Flutter 完整测试套件'),
         elevation: 0,
         backgroundColor: Theme.of(context).primaryColor,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.clear_all),
+            tooltip: '清除所有缓存',
+            onPressed: () => _showClearCacheDialog(context),
+          ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(

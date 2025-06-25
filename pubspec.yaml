@@ -13,6 +13,7 @@ dependencies:
   http: ^1.2.1
   path_drawing: ^1.0.1
   archive: ^3.4.10
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

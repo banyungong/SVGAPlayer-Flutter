@@ -188,7 +188,7 @@ class _OptimizedSVGAExampleState extends State<OptimizedSVGAExample>
 
   void _forceMemoryCleanup() {
     _performanceManager.forceMemoryCleanup();
-    SVGAParser.clearImageCache();
+          SVGAParser.clearCache();
     setState(() {
       _performanceAdvice = _performanceManager.getPerformanceAdvice();
     });

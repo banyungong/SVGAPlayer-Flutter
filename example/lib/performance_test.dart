@@ -167,11 +167,11 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('性能压力测试'),
+        title: const Text('性能压力测试'),
         backgroundColor: Colors.orange,
         actions: [
           IconButton(
-            icon: Icon(Icons.settings),
+            icon: const Icon(Icons.settings),
             onPressed: _showSettings,
           ),
         ],
@@ -190,14 +190,14 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
   
   Widget _buildControlPanel() {
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       color: Colors.orange.withValues(alpha: 0.1),
       child: Column(
         children: [
           Row(
             children: [
-              Icon(Icons.speed, color: Colors.orange),
-              SizedBox(width: 8),
+              const Icon(Icons.speed, color: Colors.orange),
+              const SizedBox(width: 8),
               Text(
                 '同时播放 $currentCount 个动画',
                 style: TextStyle(
@@ -207,10 +207,10 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Row(
             children: [
-              Text('数量: '),
+              const Text('数量: '),
               Expanded(
                 child: Slider(
                   value: currentCount.toDouble(),
@@ -231,7 +231,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
           ),
           Row(
             children: [
-              Text('文件: '),
+              const Text('文件: '),
               Expanded(
                 child: DropdownButton<String>(
                   value: selectedFile,
@@ -255,26 +255,26 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               ElevatedButton.icon(
                 onPressed: isLoading ? null : _playAllAnimations,
-                icon: Icon(Icons.play_arrow),
-                label: Text('全部播放'),
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('全部播放'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               ),
               ElevatedButton.icon(
                 onPressed: isLoading ? null : _stopAllAnimations,
-                icon: Icon(Icons.stop),
-                label: Text('全部停止'),
+                icon: const Icon(Icons.stop),
+                label: const Text('全部停止'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               ),
               ElevatedButton.icon(
                 onPressed: isLoading ? null : () => _initializeControllers(currentCount),
-                icon: Icon(Icons.refresh),
-                label: Text('重新加载'),
+                icon: const Icon(Icons.refresh),
+                label: const Text('重新加载'),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
               ),
             ],
@@ -388,7 +388,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
           border: Border.all(color: Colors.grey[300]!),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Center(
+        child: const Center(
           child: Text(
             '初始化中...',
             style: TextStyle(fontSize: 12),
@@ -415,7 +415,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
               children: [
                 Text(
                   '#${index + 1}',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
                 AnimatedBuilder(
                   animation: controller,
@@ -438,7 +438,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
                     allowDrawingOverflow: false,
                     filterQuality: FilterQuality.low,
                   )
-                : Center(
+                : const Center(
                     child: Text(
                       '加载中...',
                       style: TextStyle(fontSize: 12),
@@ -454,12 +454,12 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('性能监控设置'),
+        title: const Text('性能监控设置'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SwitchListTile(
-              title: Text('显示FPS信息'),
+              title: const Text('显示FPS信息'),
               value: showFPS,
               onChanged: (value) {
                 setState(() {
@@ -469,7 +469,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
               },
             ),
             SwitchListTile(
-              title: Text('显示内存信息'),
+              title: const Text('显示内存信息'),
               value: showMemory,
               onChanged: (value) {
                 setState(() {
@@ -483,7 +483,7 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('确定'),
+            child: const Text('确定'),
           ),
         ],
       ),
