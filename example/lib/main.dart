@@ -3,18 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 
-// 导入各种测试页面
+// 导入测试页面
 import 'basic_sample.dart';
 import 'performance_test.dart';
 import 'memory_test.dart';
-import 'edge_cases_test.dart';
 import 'dynamic_content_test.dart';
 import 'network_test.dart';
-import 'comparison_test.dart';
 import 'optimization_test.dart';
-import 'multiple_test1_test.dart';
 import 'cache_test.dart';
-import 'memory_check_test.dart';
 
 void main() => runApp(ExampleApp());
 
@@ -131,11 +127,11 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  // 定义各种测试场景
+  // 定义测试场景
   final List<TestCategory> testCategories = [
     TestCategory(
       title: '基础功能测试',
-      description: '基本的SVGA播放功能测试',
+      description: '基本的SVGA播放功能和控制测试',
       icon: Icons.play_circle_outline,
       color: Colors.blue,
       builder: (context) => BasicSampleScreen(),
@@ -146,13 +142,6 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.storage,
       color: Colors.purple,
       builder: (context) => CacheTestScreen(),
-    ),
-    TestCategory(
-      title: '内存复用验证',
-      description: '验证MovieEntity实例是否正确复用',
-      icon: Icons.check_circle,
-      color: Colors.cyan,
-      builder: (context) => MemoryCheckTest(),
     ),
     TestCategory(
       title: '性能压力测试',
@@ -169,17 +158,17 @@ class HomeScreen extends StatelessWidget {
       builder: (context) => MemoryTestScreen(),
     ),
     TestCategory(
-      title: '边界情况测试',
-      description: '异常情况和边界条件测试',
-      icon: Icons.bug_report,
-      color: Colors.red,
-      builder: (context) => EdgeCasesTestScreen(),
+      title: '内存优化测试',
+      description: '精灵过滤、图片压缩和音效控制测试',
+      icon: Icons.tune,
+      color: Colors.deepOrange,
+      builder: (context) => OptimizationTestScreen(),
     ),
     TestCategory(
       title: '动态内容测试',
       description: '动态文本和图片替换测试',
       icon: Icons.dynamic_form,
-      color: Colors.purple,
+      color: Colors.indigo,
       builder: (context) => DynamicContentTestScreen(),
     ),
     TestCategory(
@@ -188,27 +177,6 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.cloud_download,
       color: Colors.teal,
       builder: (context) => NetworkTestScreen(),
-    ),
-    TestCategory(
-      title: '对比测试',
-      description: '优化前后效果对比测试',
-      icon: Icons.compare,
-      color: Colors.indigo,
-      builder: (context) => ComparisonTestScreen(),
-    ),
-    TestCategory(
-      title: '内存优化测试',
-      description: '精灵过滤、图片压缩和音效控制测试',
-      icon: Icons.tune,
-      color: Colors.deepOrange,
-      builder: (context) => OptimizationTestScreen(),
-    ),
-    TestCategory(
-      title: '多实例崩溃测试',
-      description: '专门测试多个test1.svga实例的崩溃问题',
-      icon: Icons.warning,
-      color: Colors.red,
-      builder: (context) => MultipleTest1TestScreen(),
     ),
   ];
 

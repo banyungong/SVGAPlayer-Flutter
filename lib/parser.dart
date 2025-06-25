@@ -51,16 +51,12 @@ class SVGAParser {
   
   /// Download animation file from bundle assets, and decode it.
   Future<MovieEntity> decodeFromAssets(String path) async {
-    print('SVGAParser.decodeFromAssets: 请求加载 $path');
-    
     // 首先尝试从缓存获取
     final cached = _cache.get(path);
     if (cached != null) {
-      print('SVGAParser.decodeFromAssets: 缓存命中，返回已存在的MovieEntity (hashCode: ${cached.hashCode})');
       return cached;
     }
     
-    print('SVGAParser.decodeFromAssets: 缓存未命中，开始解析新的MovieEntity');
     // 缓存未命中，从资产加载并解析
     return decodeFromBuffer((await rootBundle.load(path)).buffer.asUint8List(), cacheKey: path);
   }
@@ -109,11 +105,9 @@ class SVGAParser {
       
       // 如果有缓存键，将结果加入缓存
       if (cacheKey != null) {
-        log('SVGAParser.decodeFromBuffer: 将新解析的MovieEntity加入缓存 (hashCode: ${result.hashCode})');
         _cache.put(cacheKey, result);
       }
       
-      log('SVGAParser.decodeFromBuffer: 返回MovieEntity (hashCode: ${result.hashCode})');
       return result;
     } finally {
       if (timeline != null) timeline.finish();

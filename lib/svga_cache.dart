@@ -127,18 +127,15 @@ class SVGACache {
     
     if (item != null) {
       item.updateAccessTime();
-      print('SVGA缓存命中: $path');
       
       // 直接返回原来的MovieEntity
       // 但将autorelease设为false，避免自动dispose
       final entity = item.movieEntity;
       entity.autorelease = false;
       
-      print('SVGA缓存复用: $path (autorelease=false)');
       return entity;
     }
     
-    log('SVGA缓存未命中: $path');
     return null;
   }
 
@@ -149,7 +146,6 @@ class SVGACache {
     
     if (item != null) {
       item.updateAccessTime();
-      log('图片缓存命中: ${hash.substring(0, 8)}...');
       return item.image;
     }
     
@@ -170,7 +166,6 @@ class SVGACache {
     
     // 检查是否超过单个项目的大小限制
     if (totalSize > maxSizeInBytes * 0.5) {
-      log('SVGA资源过大，不进行缓存: $path (${_formatBytes(totalSize)})');
       return;
     }
     
@@ -189,8 +184,6 @@ class SVGACache {
     
     _cache[key] = item;
     _currentSizeInBytes += totalSize;
-    
-    log('SVGA资源已缓存: $path (${_formatBytes(totalSize)}) 总缓存: ${_formatBytes(_currentSizeInBytes)}/${_formatBytes(maxSizeInBytes)}');
   }
 
   /// 缓存图片
@@ -205,7 +198,6 @@ class SVGACache {
     
     // 检查单个图片大小限制
     if (size > maxSizeInBytes * 0.1) {
-      log('图片过大，不进行缓存: ${hash.substring(0, 8)}... (${_formatBytes(size)})');
       return;
     }
     
@@ -220,8 +212,6 @@ class SVGACache {
     
     _imageCache[hash] = item;
     _currentImageSizeInBytes += size;
-    
-    log('图片已缓存: ${hash.substring(0, 8)}... (${_formatBytes(size)}) 图片缓存: ${_formatBytes(_currentImageSizeInBytes)}');
   }
 
   /// LRU清理主缓存
@@ -264,7 +254,6 @@ class SVGACache {
     if (oldestKey != null) {
       final item = _cache.remove(oldestKey)!;
       _currentSizeInBytes -= item.sizeInBytes;
-      log('LRU清理SVGA: $oldestKey (${_formatBytes(item.sizeInBytes)})');
     }
   }
 
@@ -285,7 +274,6 @@ class SVGACache {
     if (oldestHash != null) {
       final item = _imageCache.remove(oldestHash)!;
       _currentImageSizeInBytes -= item.sizeInBytes;
-      log('LRU清理图片: ${oldestHash.substring(0, 8)}... (${_formatBytes(item.sizeInBytes)})');
     }
   }
 
@@ -295,7 +283,6 @@ class SVGACache {
     _imageCache.clear();
     _currentSizeInBytes = 0;
     _currentImageSizeInBytes = 0;
-    log('SVGA缓存已清空');
   }
 
   /// 清空过期缓存 (超过指定时间未访问)
@@ -322,17 +309,11 @@ class SVGACache {
     for (var key in expiredKeys) {
       final item = _cache.remove(key)!;
       _currentSizeInBytes -= item.sizeInBytes;
-      log('清理过期SVGA: $key');
     }
     
     for (var hash in expiredImageHashes) {
       final item = _imageCache.remove(hash)!;
       _currentImageSizeInBytes -= item.sizeInBytes;
-      log('清理过期图片: ${hash.substring(0, 8)}...');
-    }
-    
-    if (expiredKeys.isNotEmpty || expiredImageHashes.isNotEmpty) {
-      log('清理完成: ${expiredKeys.length}个SVGA, ${expiredImageHashes.length}个图片');
     }
   }
 
