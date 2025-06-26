@@ -23,8 +23,9 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
   int frameCount = 0;
   DateTime lastFrameTime = DateTime.now();
   
-  // 内存监控
-  int memoryUsage = 0;
+  // 内存监控 - 使用真实数据
+  Map<String, dynamic> cacheStats = {};
+  List<String> performanceAdvice = [];
   Timer? memoryTimer;
   
   // 测试选项
@@ -148,10 +149,13 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
   }
   
   void _updateMemoryUsage() {
-    // 这里可以集成实际的内存监控
-    // 暂时使用模拟数据
+    // 使用真实的缓存统计数据
     setState(() {
-      memoryUsage = (controllers.length * 5 + math.Random().nextInt(10));
+      cacheStats = SVGAParser.getCacheStats();
+      
+      // 获取真实的性能建议
+      final performanceManager = SVGAPerformanceManager();
+      performanceAdvice = performanceManager.getPerformanceAdvice();
     });
   }
   
@@ -313,15 +317,46 @@ class _PerformanceTestScreenState extends State<PerformanceTestScreen>
           ],
           if (showFPS && showMemory) SizedBox(height: 8),
           if (showMemory) ...[
-            Row(
-              children: [
-                Icon(Icons.memory, color: Colors.green, size: 20),
-                SizedBox(width: 8),
-                Text('内存使用: ${memoryUsage}MB'),
-                SizedBox(width: 16),
-                Text('控制器数量: ${controllers.length}'),
+            // 显示真实的内存统计数据
+            if (cacheStats.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.memory, color: Colors.green, size: 20),
+                  SizedBox(width: 8),
+                  Text('缓存使用: ${cacheStats['total']?['size_formatted'] ?? '0B'}'),
+                  SizedBox(width: 16),
+                  Text('SVGA文件: ${cacheStats['svga_cache']?['count'] ?? 0}个'),
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                children: [
+                  SizedBox(width: 28),
+                  Text('图片缓存: ${cacheStats['image_cache']?['count'] ?? 0}个'),
+                  SizedBox(width: 16),
+                  Text('使用率: ${cacheStats['total']?['usage_percentage'] ?? '0.0'}%'),
+                ],
+              ),
+              // 显示性能建议
+              if (performanceAdvice.isNotEmpty) ...[
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('性能建议:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ...performanceAdvice.map((advice) => Text('• $advice', style: TextStyle(fontSize: 11))),
+                    ],
+                  ),
+                ),
               ],
-            ),
+            ] else
+              Text('内存统计: 加载中...'),
           ],
         ],
       ),

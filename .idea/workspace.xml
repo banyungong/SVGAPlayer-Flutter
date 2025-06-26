@@ -5,18 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="665113db-b9a7-48d1-bb33-eda968d1f970" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/CACHE_OPTIMIZATION.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/MEMORY_OPTIMIZATION.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/MULTIPLE_INSTANCE_FIX.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/PERFORMANCE_OPTIMIZATION.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/comparison_test.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/edge_cases_test.dart" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/lib/cache_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/cache_test.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/example/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/main.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/memory_check_test.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/multiple_test1_test.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/optimized_example.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/parser.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/parser.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/svga_cache.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/svga_cache.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/lib/memory_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/memory_test.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/lib/optimization_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/optimization_test.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/example/lib/performance_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/performance_test.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

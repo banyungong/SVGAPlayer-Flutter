@@ -49,13 +49,17 @@ class _MemoryTestScreenState extends State<MemoryTestScreen>
   }
   
   void _updateMemoryUsage() {
-    // 模拟内存使用计算
+    // 使用真实的内存使用计算
     int totalMemory = 0;
     for (var instance in instances) {
-      if (instance.isLoaded) {
-        totalMemory += instance.estimatedMemoryUsage;
+      if (instance.isLoaded && instance.videoItem != null) {
+        // 使用真实的内存估算方法
+        totalMemory += instance.videoItem!.estimateMemoryUsage();
       }
     }
+    
+    // 将字节转换为MB
+    totalMemory = totalMemory ~/ (1024 * 1024);
     
     setState(() {
       currentMemoryUsage = totalMemory;
@@ -105,26 +109,8 @@ class _MemoryTestScreenState extends State<MemoryTestScreen>
   }
   
   int _calculateMemoryUsage(MovieEntity videoItem) {
-    // 简单的内存使用估算
-    int memoryUsage = 0;
-    
-    // 基础MovieEntity内存
-    memoryUsage += 1; // 1MB 基础内存
-    
-    // 图片缓存内存
-         for (var entry in videoItem.bitmapCache.entries) {
-       final bitmap = entry.value;
-       // 估算图片内存: width * height * 4 bytes (RGBA)
-       memoryUsage += (bitmap.width * bitmap.height * 4) ~/ (1024 * 1024);
-     }
-     
-     // 动态图片内存
-     for (var entry in videoItem.dynamicItem.dynamicImages.entries) {
-       final bitmap = entry.value;
-       memoryUsage += (bitmap.width * bitmap.height * 4) ~/ (1024 * 1024);
-     }
-    
-    return math.max(1, memoryUsage); // 至少1MB
+    // 使用真实的内存使用估算
+    return videoItem.estimateMemoryUsage() ~/ (1024 * 1024); // 转换为MB
   }
   
   void _disposeInstance(TestInstance instance) {
@@ -198,6 +184,11 @@ class _MemoryTestScreenState extends State<MemoryTestScreen>
   }
   
   Widget _buildMemoryInfo() {
+    // 获取真实的缓存统计数据
+    final cacheStats = SVGAParser.getCacheStats();
+    final performanceManager = SVGAPerformanceManager();
+    final advice = performanceManager.getPerformanceAdvice();
+    
     return Container(
       padding: EdgeInsets.all(16),
       color: Colors.green.withValues(alpha: 0.1),
@@ -225,6 +216,47 @@ class _MemoryTestScreenState extends State<MemoryTestScreen>
               _buildMemoryCard('实例数量', '${instances.length}', Colors.purple),
             ],
           ),
+          // 添加缓存统计信息
+          SizedBox(height: 12),
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              children: [
+                Text('缓存统计', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text('缓存: ${cacheStats['total']?['size_formatted'] ?? '0B'}', style: TextStyle(fontSize: 11)),
+                    Text('SVGA: ${cacheStats['svga_cache']?['count'] ?? 0}个', style: TextStyle(fontSize: 11)),
+                    Text('图片: ${cacheStats['image_cache']?['count'] ?? 0}个', style: TextStyle(fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // 显示性能建议
+          if (advice.isNotEmpty) ...[
+            SizedBox(height: 8),
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('性能建议:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ...advice.map((suggestion) => Text('• $suggestion', style: TextStyle(fontSize: 11))),
+                ],
+              ),
+            ),
+          ],
           SizedBox(height: 16),
           Container(
             height: 60,

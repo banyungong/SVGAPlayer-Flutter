@@ -219,6 +219,8 @@ class _CacheTestScreenState extends State<CacheTestScreen> with TickerProviderSt
             _buildCacheStatItem('图片缓存', cacheStats['image_cache']),
             const SizedBox(height: 8),
             _buildCacheStatItem('总计', cacheStats['total']),
+            const SizedBox(height: 8),
+            _buildPerformanceInfo(),
           ] else
             const Text('暂无缓存数据'),
         ],
@@ -245,6 +247,49 @@ class _CacheTestScreenState extends State<CacheTestScreen> with TickerProviderSt
           ),
         ),
       ],
+    );
+  }
+  
+  Widget _buildPerformanceInfo() {
+    final performanceManager = SVGAPerformanceManager();
+    final advice = performanceManager.getPerformanceAdvice();
+    final totalMemory = performanceManager.totalMemoryUsage;
+    
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '性能监控',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue[700]),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '总内存使用: ${(totalMemory / (1024 * 1024)).toStringAsFixed(1)} MB',
+            style: const TextStyle(fontSize: 11),
+          ),
+          if (advice.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '性能建议:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.orange[700]),
+            ),
+            ...advice.map((suggestion) => Text(
+              '• $suggestion',
+              style: const TextStyle(fontSize: 10),
+            )),
+          ] else
+            Text(
+              '性能状态良好',
+              style: TextStyle(fontSize: 11, color: Colors.green[700]),
+            ),
+        ],
+      ),
     );
   }
   

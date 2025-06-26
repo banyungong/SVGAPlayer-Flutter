@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -321,11 +322,17 @@ class _SVGASampleScreenState extends State<SVGASampleScreen>
   late double containerWidth;
   late double containerHeight;
   bool hideOptions = false;
+  
+  // 性能监控相关
+  Timer? _performanceTimer;
+  Map<String, dynamic> _cacheStats = {};
+  bool _showPerformanceOverlay = false;
   @override
   void initState() {
     super.initState();
     this.animationController = SVGAAnimationController(vsync: this);
     this._loadAnimation();
+    _startPerformanceMonitoring();
   }
 
   @override
@@ -337,6 +344,7 @@ class _SVGASampleScreenState extends State<SVGASampleScreen>
 
   @override
   void dispose() {
+    _performanceTimer?.cancel();
     this.animationController?.dispose();
     this.animationController = null;
     super.dispose();
@@ -388,11 +396,27 @@ class _SVGASampleScreenState extends State<SVGASampleScreen>
             ),
           ),
           Positioned(bottom: 10, child: _buildOptions(context)),
+          // 性能监控悬浮层
+          if (_showPerformanceOverlay) _buildPerformanceOverlay(),
         ],
       ),
-      floatingActionButton: isLoading || animationController!.videoItem == null
-          ? null
-          : FloatingActionButton.extended(
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            mini: true,
+            heroTag: "performance",
+            onPressed: () {
+              setState(() {
+                _showPerformanceOverlay = !_showPerformanceOverlay;
+              });
+            },
+            child: Icon(_showPerformanceOverlay ? Icons.close : Icons.analytics),
+          ),
+          SizedBox(height: 8),
+          if (!isLoading && animationController!.videoItem != null)
+            FloatingActionButton.extended(
+              heroTag: "playPause",
               label: Text(animationController!.isAnimating ? "Pause" : "Play"),
               icon: Icon(animationController!.isAnimating
                   ? Icons.pause
@@ -405,6 +429,8 @@ class _SVGASampleScreenState extends State<SVGASampleScreen>
                 }
                 setState(() {});
               }),
+        ],
+      ),
     );
   }
 
@@ -585,6 +611,91 @@ class _SVGASampleScreenState extends State<SVGASampleScreen>
                       ),
                     )
                     .toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  void _startPerformanceMonitoring() {
+    _performanceTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+      setState(() {
+        _cacheStats = SVGAParser.getCacheStats();
+      });
+    });
+  }
+  
+  Widget _buildPerformanceOverlay() {
+    final performanceManager = SVGAPerformanceManager();
+    final advice = performanceManager.getPerformanceAdvice();
+    final totalMemory = performanceManager.totalMemoryUsage;
+    
+    return Positioned(
+      top: 100,
+      right: 16,
+      child: Container(
+        width: 200,
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '实时性能监控',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            SizedBox(height: 8),
+            if (_cacheStats.isNotEmpty) ...[
+              Text(
+                '缓存: ${_cacheStats['total']?['size_formatted'] ?? '0B'}',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              Text(
+                'SVGA: ${_cacheStats['svga_cache']?['count'] ?? 0}个',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              Text(
+                '图片: ${_cacheStats['image_cache']?['count'] ?? 0}个',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              Text(
+                '使用率: ${_cacheStats['total']?['usage_percentage'] ?? '0.0'}%',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              Text(
+                '内存: ${(totalMemory / (1024 * 1024)).toStringAsFixed(1)}MB',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+            if (advice.isNotEmpty) ...[
+              SizedBox(height: 8),
+              Text(
+                '性能建议:',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              ...advice.map((suggestion) => Text(
+                '• $suggestion',
+                style: TextStyle(color: Colors.orange, fontSize: 11),
+              )),
+            ] else ...[
+              SizedBox(height: 4),
+              Text(
+                '✓ 性能良好',
+                style: TextStyle(color: Colors.green, fontSize: 12),
               ),
             ],
           ],

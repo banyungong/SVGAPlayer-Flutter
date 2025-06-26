@@ -243,9 +243,32 @@ class _OptimizationTestScreenState extends State<OptimizationTestScreen> with Ti
               ],
             ),
             SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatItem(
+                    '图片缓存',
+                    '${afterStats['image_cache']?['count'] ?? 0}个',
+                    Colors.purple,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatItem(
+                    '使用率',
+                    '${afterStats['total']?['usage_percentage'] ?? '0.0'}%',
+                    Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
 
             // 当前配置信息
             _buildConfigInfo(),
+            
+            // 显示性能建议
+            SizedBox(height: 8),
+            _buildPerformanceAdvice(),
           ] else
             Text('暂无统计数据，请先加载动画'),
         ],
@@ -329,8 +352,55 @@ class _OptimizationTestScreenState extends State<OptimizationTestScreen> with Ti
         ],
       ),
     );
+    }
+  
+  Widget _buildPerformanceAdvice() {
+    final performanceManager = SVGAPerformanceManager();
+    final advice = performanceManager.getPerformanceAdvice();
+    
+    if (advice.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 16),
+            SizedBox(width: 8),
+            Text('性能良好，无优化建议', style: TextStyle(fontSize: 11, color: Colors.green[700])),
+          ],
+        ),
+      );
+    }
+    
+    return Container(
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange, size: 16),
+              SizedBox(width: 8),
+              Text('性能建议:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange[700])),
+            ],
+          ),
+          SizedBox(height: 4),
+          ...advice.map((suggestion) => Padding(
+            padding: EdgeInsets.only(left: 24),
+            child: Text('• $suggestion', style: TextStyle(fontSize: 11)),
+          )),
+        ],
+      ),
+    );
   }
-
+  
   Widget _buildAnimationArea() {
     return Container(
       padding: EdgeInsets.all(16),
