@@ -43,8 +43,8 @@ class ImageCacheItem {
 
 /// LRU缓存管理器
 class SVGACache {
-  static const int _defaultMaxSizeInBytes = 50 * 1024 * 1024; // 50MB
-  static const int _defaultMaxCount = 100;
+  static const int _defaultMaxSizeInBytes = 500 * 1024 * 1024; // 50MB
+  static const int _defaultMaxCount = 30;
 
   final int maxSizeInBytes;
   final int maxCount;
