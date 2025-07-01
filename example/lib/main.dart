@@ -12,6 +12,8 @@ import 'dynamic_content_test.dart';
 import 'network_test.dart';
 import 'optimization_test.dart';
 import 'cache_test.dart';
+import 'repeat_playback_test.dart';
+import 'business_scenario_test.dart';
 
 void main() => runApp(ExampleApp());
 
@@ -178,6 +180,20 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.cloud_download,
       color: Colors.teal,
       builder: (context) => NetworkTestScreen(),
+    ),
+    TestCategory(
+      title: '重复播放测试',
+      description: '测试SVGA重复播放时的问题复现与调试',
+      icon: Icons.repeat_one,
+      color: Colors.red,
+      builder: (context) => RepeatPlaybackTestScreen(),
+    ),
+    TestCategory(
+      title: '业务场景重现',
+      description: '模拟业务中的SVGA加载方式：下载→readAsBytes→decodeFromBuffer',
+      icon: Icons.business_center,
+      color: Colors.deepOrange,
+      builder: (context) => BusinessScenarioTestScreen(),
     ),
   ];
 

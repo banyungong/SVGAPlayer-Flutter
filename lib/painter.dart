@@ -41,12 +41,17 @@ class _SVGAPainter extends CustomPainter {
       return;
     }
     
+    // 检查MovieEntity是否已被释放
+    if (controller.videoItem == null || controller.videoItem!.isDisposed) {
+      return;
+    }
+    
     // 记录帧渲染性能
     controller.recordFrameRender(
       videoItem.hashCode.toString(), 
       currentFrame
     );
-    if (size.isEmpty || controller.videoItem == null) return;
+    if (size.isEmpty) return;
     
     final params = videoItem.params;
     final Size viewBoxSize = Size(params.viewBoxWidth, params.viewBoxHeight);
@@ -149,8 +154,27 @@ class _SVGAPainter extends CustomPainter {
         canvas.save();
         canvas.clipPath(buildDPath(frameItem.clipPath));
       }
-      final frameRect =
-          Rect.fromLTRB(0, 0, frameItem.layout.width, frameItem.layout.height);
+      // 验证layout尺寸的有效性，防止创建无效矩形
+      final layoutWidth = frameItem.layout.width;
+      final layoutHeight = frameItem.layout.height;
+      
+      // 如果layout尺寸无效，跳过绘制但需要正确处理canvas状态
+      if (layoutWidth <= 0 || layoutHeight <= 0 || 
+          !layoutWidth.isFinite || !layoutHeight.isFinite) {
+        if (kDebugMode) {
+          print('Skipping sprite $imageKey with invalid layout: width=$layoutWidth, height=$layoutHeight');
+        }
+        // 确保正确恢复canvas状态
+        if (needClip) {
+          canvas.restore();
+        }
+        if (needTransform) {
+          canvas.restore();
+        }
+        continue;
+      }
+      
+      final frameRect = Rect.fromLTRB(0, 0, layoutWidth, layoutHeight);
       final frameAlpha =
           frameItem.hasAlpha() ? (frameItem.alpha * 255).toInt() : 255;
       drawBitmap(canvas, imageKey, frameRect, frameAlpha);
@@ -176,48 +200,154 @@ class _SVGAPainter extends CustomPainter {
       return false;
     }
     
+    // 检查layout是否有效
+    final layoutWidth = frameItem.layout.width;
+    final layoutHeight = frameItem.layout.height;
+    if (layoutWidth <= 0 || layoutHeight <= 0 || 
+        !layoutWidth.isFinite || !layoutHeight.isFinite) {
+      return false;
+    }
+    
     // 检查是否有bitmap、shape或动态内容
-    final hasBitmap = videoItem.dynamicItem.dynamicImages[imageKey] != null ||
-        videoItem.bitmapCache[imageKey] != null;
+    final hasBitmap = _isValidBitmap(imageKey);
     final hasShapes = frameItem.shapes.isNotEmpty;
     final hasDynamic = videoItem.dynamicItem.dynamicDrawer[imageKey] != null ||
         videoItem.dynamicItem.dynamicText[imageKey] != null;
     
     return hasBitmap || hasShapes || hasDynamic;
   }
-
-  void drawBitmap(Canvas canvas, String imageKey, Rect frameRect, int alpha) {
+  
+  /// 检查bitmap是否有效
+  bool _isValidBitmap(String imageKey) {
+    // 首先检查MovieEntity是否已被释放
+    if (videoItem.isDisposed) {
+      return false;
+    }
+    
     final bitmap = videoItem.dynamicItem.dynamicImages[imageKey] ??
         videoItem.bitmapCache[imageKey];
-    if (bitmap == null) return;
-
-    // 检查图片是否已经被释放
+    
+    if (bitmap == null) return false;
+    
     try {
-      // 通过访问width属性来检查图片是否有效
+      // 尝试访问图片属性来检查是否有效
       final width = bitmap.width;
       final height = bitmap.height;
-      if (width <= 0 || height <= 0) {
+      return width > 0 && height > 0;
+    } catch (e) {
+      // 如果访问失败，说明图片已被释放
+      return false;
+    }
+  }
+
+  void drawBitmap(Canvas canvas, String imageKey, Rect frameRect, int alpha) {
+    // 检查MovieEntity是否已被释放
+    if (videoItem.isDisposed) {
+      return;
+    }
+    
+    final bitmap = videoItem.dynamicItem.dynamicImages[imageKey] ??
+        videoItem.bitmapCache[imageKey];
+    
+    if (bitmap == null) return;
+
+    // 多层保护检查图片是否已经被释放
+    try {
+      // 1. 首先检查图片对象本身是否还有效
+      if (!_isImageValid(bitmap)) {
+        _cleanupInvalidBitmap(imageKey);
         return;
       }
 
-      // 重用Paint对象
-      _bitmapPaint.filterQuality = filterQuality;
-      _bitmapPaint.color = Color.fromARGB(alpha, 0, 0, 0);
+      // 2. 通过访问width/height属性进行二次验证
+      final width = bitmap.width;
+      final height = bitmap.height;
+      if (width <= 0 || height <= 0) {
+        _cleanupInvalidBitmap(imageKey);
+        return;
+      }
 
-      Rect srcRect = Rect.fromLTRB(0, 0, width.toDouble(), height.toDouble());
-      Rect dstRect = frameRect;
+      // 3. 设置画笔属性（使用保护性的alpha值）
+      _bitmapPaint.filterQuality = filterQuality;
+      // 确保alpha值在有效范围内，防止断言失败
+      final safeAlpha = alpha.clamp(0, 255);
+      _bitmapPaint.color = Color.fromARGB(safeAlpha, 255, 255, 255);
+
+      // 4. 创建安全的绘制区域
+      final Rect srcRect = Rect.fromLTRB(0, 0, width.toDouble(), height.toDouble());
+      final Rect dstRect = frameRect;
+      
+      // 5. 验证绘制区域是否有效
+      if (srcRect.isEmpty || dstRect.isEmpty || !srcRect.isFinite || !dstRect.isFinite ||
+          dstRect.width <= 0 || dstRect.height <= 0) {
+        if (kDebugMode) {
+          print('drawBitmap: Invalid rect for $imageKey - srcRect: $srcRect, dstRect: $dstRect');
+        }
+        return;
+      }
+
+      // 6. 执行绘制操作，并处理可能的异常
       canvas.drawImageRect(bitmap, srcRect, dstRect, _bitmapPaint);
       drawTextOnBitmap(canvas, imageKey, frameRect, alpha);
+      
     } catch (e) {
-      // 如果图片已经被释放或无效，跳过绘制
+      // 全面的错误处理和日志记录
       if (kDebugMode) {
-        print('drawBitmap error for $imageKey: $e');
+        print('drawBitmap error for $imageKey: $e. Cleaning up invalid bitmap.');
       }
-      // 尝试从bitmapCache中移除无效的图片引用
-      if (videoItem.bitmapCache.containsKey(imageKey)) {
-        videoItem.bitmapCache.remove(imageKey);
-      }
+      _cleanupInvalidBitmap(imageKey);
+      
+      // 记录错误信息以便调试
+      _recordBitmapError(imageKey, e);
       return;
+    }
+  }
+  
+  /// 检查Image对象是否仍然有效
+  bool _isImageValid(ui.Image image) {
+    try {
+      // 尝试访问图片的基本属性
+      // 如果图片已被dispose，这些操作会抛出异常
+      final _ = image.width;
+      final __ = image.height;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// 记录bitmap错误信息，用于调试和监控
+  void _recordBitmapError(String imageKey, dynamic error) {
+    // 在这里可以添加错误统计、上报等逻辑
+    // 目前先简单记录到debug输出
+    if (kDebugMode) {
+      final errorType = error.runtimeType.toString();
+      final errorMessage = error.toString();
+      print('BitmapError - Key: $imageKey, Type: $errorType, Message: $errorMessage');
+      
+      // 输出一些上下文信息帮助调试
+      if (!videoItem.isDisposed) {
+        print('VideoItem state - bitmapCache size: ${videoItem.bitmapCache.length}, autorelease: ${videoItem.autorelease}, references: ${videoItem.referenceCount}');
+      } else {
+        print('VideoItem state - DISPOSED, references: ${videoItem.referenceCount}');
+      }
+    }
+  }
+  
+  /// 清理无效的图片引用
+  void _cleanupInvalidBitmap(String imageKey) {
+    // 如果MovieEntity已被释放，不进行清理操作
+    if (videoItem.isDisposed) {
+      return;
+    }
+    
+    // 从bitmapCache中移除无效的图片引用
+    if (videoItem.bitmapCache.containsKey(imageKey)) {
+      videoItem.bitmapCache.remove(imageKey);
+    }
+    // 从动态图片中移除无效的引用
+    if (videoItem.dynamicItem.dynamicImages.containsKey(imageKey)) {
+      videoItem.dynamicItem.dynamicImages.remove(imageKey);
     }
   }
 
@@ -534,15 +664,31 @@ class _SVGAPainter extends CustomPainter {
     if (dynamicText.isEmpty) return;
     if (dynamicText[imageKey] == null) return;
 
-    TextPainter? textPainter = dynamicText[imageKey];
+    // 验证frameRect是否有效
+    if (frameRect.isEmpty || !frameRect.isFinite || 
+        frameRect.width <= 0 || frameRect.height <= 0) {
+      if (kDebugMode) {
+        print('drawTextOnBitmap: Invalid frameRect for $imageKey - $frameRect');
+      }
+      return;
+    }
 
-    textPainter?.paint(
-      canvas,
-      Offset(
-        (frameRect.width - textPainter.width) / 2.0,
-        (frameRect.height - textPainter.height) / 2.0,
-      ),
-    );
+    TextPainter? textPainter = dynamicText[imageKey];
+    if (textPainter == null) return;
+
+    try {
+      textPainter.paint(
+        canvas,
+        Offset(
+          (frameRect.width - textPainter.width) / 2.0,
+          (frameRect.height - textPainter.height) / 2.0,
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('drawTextOnBitmap error for $imageKey: $e');
+      }
+    }
   }
 
   @override

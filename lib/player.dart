@@ -2,6 +2,7 @@ library svgaplayer_flutter_player;
 
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -83,11 +84,20 @@ class SVGAAnimationController extends AnimationController with SVGAPerformanceMo
     if (value == null) {
       clear();
     }
-    if (_videoItem != null && _videoItem!.autorelease) {
-      _videoItem!.dispose();
+    
+    // 使用引用计数机制管理MovieEntity的生命周期
+    final oldVideoItem = _videoItem;
+    if (oldVideoItem != null && oldVideoItem.autorelease) {
+      // 减少旧的MovieEntity的引用计数
+      oldVideoItem.removeReference();
     }
+    
     _videoItem = value;
+    
     if (value != null) {
+      // 增加新的MovieEntity的引用计数
+      value.addReference();
+      
       // 记录内存使用
       recordMemoryUsage(value.hashCode.toString(), value.estimateMemoryUsage());
       final movieParams = value.params;

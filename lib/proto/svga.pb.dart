@@ -5,9 +5,11 @@
 // @dart = 2.12
 // ignore_for_file: annotate_overrides,camel_case_types,unnecessary_const,non_constant_identifier_names,library_prefixes,unused_import,unused_shown_name,return_of_invalid_type,unnecessary_this,prefer_final_fields
 
+import 'dart:async' show Future;
 import 'dart:core' as $core;
-import 'dart:core' show int, bool, double, String, List, Map, override;
+import 'dart:core' show int, bool, double, String, List, Map, override, print;
 import 'dart:ui' as ui show Image, Path;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:protobuf/protobuf.dart' as $pb;
 
 import 'svga.pbenum.dart';
@@ -1769,12 +1771,64 @@ class MovieEntity extends $pb.GeneratedMessage {
   SVGADynamicEntity dynamicItem = SVGADynamicEntity();
   Map<String, ui.Image> bitmapCache = {};
   Map<String, ui.Path> pathCache = {};
+  
+  // 引用计数机制，用于跟踪有多少个控制器在使用这个MovieEntity
+  int _referenceCount = 0;
+  bool _isDisposed = false;
+  
+  /// 增加引用计数
+  void addReference() {
+    if (!_isDisposed) {
+      _referenceCount++;
+    }
+  }
+  
+  /// 减少引用计数，当引用计数为0时自动释放资源
+  void removeReference() {
+    if (_isDisposed) return;
+    
+    _referenceCount--;
+    if (_referenceCount <= 0) {
+      _actualDispose();
+    }
+  }
+  
+  /// 获取当前引用计数
+  int get referenceCount => _referenceCount;
+  
+  /// 检查是否已被释放
+  bool get isDisposed => _isDisposed;
 
   void dispose() {
-    bitmapCache.values.forEach((element) {
-      element.dispose();
-    });
+    // 兼容旧的调用方式，直接释放资源
+    _actualDispose();
+  }
+  
+  /// 实际执行资源释放
+  void _actualDispose() {
+    if (_isDisposed) return;
+    
+    _isDisposed = true;
+    
+    // 安全地释放图片资源
+    final imagesToDispose = List<ui.Image>.from(bitmapCache.values);
     bitmapCache.clear();
+    
+    // 在下一个事件循环中释放图片，避免在绘制过程中释放
+    Future.microtask(() {
+      for (final image in imagesToDispose) {
+        try {
+          image.dispose();
+        } catch (e) {
+          // 忽略释放时的错误，可能图片已经被其他地方释放了
+          if (kDebugMode) {
+            print('Warning: Error disposing image - $e');
+          }
+        }
+      }
+    });
+    
     pathCache.clear();
+    _referenceCount = 0;
   }
 }

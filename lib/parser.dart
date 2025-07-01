@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'dart:ui' as ui;
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:archive/archive.dart' as archive;
 import 'package:flutter/foundation.dart';
@@ -41,6 +42,8 @@ class SVGAParser {
     // 首先尝试从缓存获取
     final cached = _cache.get(url);
     if (cached != null) {
+      // 缓存命中时需要增加引用计数
+      cached.addReference();
       return cached;
     }
     
@@ -48,17 +51,47 @@ class SVGAParser {
     final response = await get(Uri.parse(url));
     return decodeFromBuffer(response.bodyBytes, cacheKey: url);
   }
-  
+
   /// Download animation file from bundle assets, and decode it.
   Future<MovieEntity> decodeFromAssets(String path) async {
     // 首先尝试从缓存获取
     final cached = _cache.get(path);
     if (cached != null) {
+      // 缓存命中时需要增加引用计数
+      cached.addReference();
       return cached;
     }
     
     // 缓存未命中，从资产加载并解析
     return decodeFromBuffer((await rootBundle.load(path)).buffer.asUint8List(), cacheKey: path);
+  }
+
+  /// Load animation file from local file system, and decode it.
+  Future<MovieEntity> decodeFromFile(String filePath) async {
+    // 使用文件的绝对路径作为缓存键，确保唯一性
+    final file = File(filePath);
+    final absolutePath = file.absolute.path;
+    
+    // 首先尝试从缓存获取
+    final cached = _cache.get(absolutePath);
+    if (cached != null) {
+      // 缓存命中时需要增加引用计数
+      cached.addReference();
+      return cached;
+    }
+    
+    // 检查文件是否存在
+    if (!await file.exists()) {
+      throw Exception('SVGA file not found: $filePath');
+    }
+    
+    try {
+      // 缓存未命中，从本地文件加载并解析
+      final bytes = await file.readAsBytes();
+      return decodeFromBuffer(bytes, cacheKey: absolutePath);
+    } catch (e) {
+      throw Exception('Failed to read SVGA file: $filePath, error: $e');
+    }
   }
   
   /// 获取缓存统计信息
@@ -88,25 +121,28 @@ class SVGAParser {
       // 在isolate中进行解压缩，避免阻塞UI线程
       final inflatedBytes = await _decompressInIsolate(bytes);
       
-      if (timeline != null) {
-        timeline.instant('MovieEntity.fromBuffer()',
-            arguments: {'inflatedLength': inflatedBytes.length});
-      }
-      final movie = MovieEntity.fromBuffer(inflatedBytes);
-      if (timeline != null) {
-        timeline.instant('prepareResources()',
-            arguments: {'images': movie.images.keys.join(',')});
-      }
+    if (timeline != null) {
+      timeline.instant('MovieEntity.fromBuffer()',
+          arguments: {'inflatedLength': inflatedBytes.length});
+    }
+    final movie = MovieEntity.fromBuffer(inflatedBytes);
+    if (timeline != null) {
+      timeline.instant('prepareResources()',
+          arguments: {'images': movie.images.keys.join(',')});
+    }
       final processedMovie = _processShapeItems(movie);
       final result = await _prepareResources(
         processedMovie,
-        timeline: timeline,
+      timeline: timeline,
       );
       
       // 如果有缓存键，将结果加入缓存
       if (cacheKey != null) {
         _cache.put(cacheKey, result);
       }
+      
+      // 初始化引用计数（parser创建的实例默认有1个引用）
+      result.addReference();
       
       return result;
     } finally {
@@ -242,7 +278,9 @@ class SVGAParser {
     final futures = images.entries.map((item) async {
       final decodeImage = await _decodeImageItem(
           item.key, Uint8List.fromList(item.value),
-          timeline: timeline);
+          timeline: timeline,
+          createIndependentCopy: false, // 先禁用独立副本功能
+      );
       if (decodeImage != null) {
         movieItem.bitmapCache[item.key] = decodeImage;
       }
@@ -253,11 +291,17 @@ class SVGAParser {
   }
 
   Future<ui.Image?> _decodeImageItem(String key, Uint8List bytes,
-      {TimelineTask? timeline}) async {
+      {TimelineTask? timeline, bool createIndependentCopy = false}) async {
     // 首先尝试从图片缓存获取
     final cachedImage = _cache.getImage(bytes);
-    if (cachedImage != null) {
+    if (cachedImage != null && !createIndependentCopy) {
       return cachedImage;
+    }
+    
+    // 如果需要创建独立副本，即使有缓存也要重新解码
+    if (createIndependentCopy && cachedImage != null) {
+      // 创建现有图片的独立副本
+      return await _createImageCopy(cachedImage);
     }
     
     TimelineTask? task;
@@ -303,8 +347,10 @@ class SVGAParser {
         );
       }
       
-      // 将处理后的图片加入缓存
-      _cache.putImage(bytes, finalImage);
+      // 将处理后的图片加入缓存（只有在不创建独立副本时才缓存）
+      if (!createIndependentCopy) {
+        _cache.putImage(bytes, finalImage);
+      }
       
       return finalImage;
     } catch (e, stack) {
@@ -363,6 +409,52 @@ class SVGAParser {
     } catch (e) {
       _optimizationConfig.log('压缩图片失败: $e');
       // 如果压缩失败，返回原图
+      return originalImage;
+    }
+  }
+  
+  /// 创建图片的独立副本
+  /// 
+  /// 在多实例场景下，为每个MovieEntity创建独立的ui.Image副本，
+  /// 避免多个实例共享同一个ui.Image对象导致的资源释放冲突。
+  Future<ui.Image> _createImageCopy(ui.Image originalImage) async {
+    try {
+      // 创建画布记录器
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      
+      // 使用高质量过滤器确保副本质量
+      final paint = ui.Paint()
+        ..filterQuality = ui.FilterQuality.high;
+      
+      // 将原图按原始尺寸绘制到新的canvas上
+      canvas.drawImageRect(
+        originalImage,
+        ui.Rect.fromLTWH(0, 0, originalImage.width.toDouble(), originalImage.height.toDouble()),
+        ui.Rect.fromLTWH(0, 0, originalImage.width.toDouble(), originalImage.height.toDouble()),
+        paint,
+      );
+      
+      // 结束录制并生成新的ui.Image对象
+      final picture = recorder.endRecording();
+      final copiedImage = await picture.toImage(
+        originalImage.width,
+        originalImage.height,
+      );
+      
+      // 清理临时资源
+      picture.dispose();
+      
+      if (kDebugMode) {
+        print('SVGAParser: 为多实例场景创建了图片副本 ${originalImage.width}x${originalImage.height}');
+      }
+      
+      return copiedImage;
+    } catch (e) {
+      if (kDebugMode) {
+        print('SVGAParser: 创建图片副本失败: $e，返回原图');
+      }
+      // 如果创建副本失败，返回原图（虽然可能导致资源冲突，但至少不会崩溃）
       return originalImage;
     }
   }
