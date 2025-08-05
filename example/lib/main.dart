@@ -14,6 +14,7 @@ import 'optimization_test.dart';
 import 'cache_test.dart';
 import 'repeat_playback_test.dart';
 import 'business_scenario_test.dart';
+import 'cache_crash_test.dart';
 
 void main() => runApp(ExampleApp());
 
@@ -194,6 +195,13 @@ class HomeScreen extends StatelessWidget {
       icon: Icons.business_center,
       color: Colors.deepOrange,
       builder: (context) => BusinessScenarioTestScreen(),
+    ),
+    TestCategory(
+      title: '缓存崩溃测试',
+      description: '测试多实例播放+缓存清理的JNI异常修复效果',
+      icon: Icons.bug_report,
+      color: Colors.red,
+      builder: (context) => CacheCrashTestScreen(),
     ),
   ];
 

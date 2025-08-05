@@ -1,7 +1,6 @@
-import 'dart:developer';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 import 'proto/svga.pbserver.dart';
 
@@ -254,6 +253,14 @@ class SVGACache {
     if (oldestKey != null) {
       final item = _cache.remove(oldestKey)!;
       _currentSizeInBytes -= item.sizeInBytes;
+      
+      // 🔧 修复：检查MovieEntity的引用计数，只有在没有引用时才释放
+      final entity = item.movieEntity;
+      if (entity.referenceCount <= 0 && !entity.isDisposed) {
+        // 安全释放：先检查bitmapCache中的图片是否在imageCache中
+        _cleanupMovieEntityImages(entity);
+        entity.dispose();
+      }
     }
   }
 
@@ -274,11 +281,46 @@ class SVGACache {
     if (oldestHash != null) {
       final item = _imageCache.remove(oldestHash)!;
       _currentImageSizeInBytes -= item.sizeInBytes;
+      
+      // 🔧 修复：检查图片是否还在其他地方被使用
+      if (_canSafelyDisposeImage(item.image)) {
+        try {
+          item.image.dispose();
+        } catch (e) {
+          // 图片可能已经被释放，忽略错误
+          if (kDebugMode) {
+            print('Warning: Error disposing cached image - $e');
+          }
+        }
+      }
     }
   }
 
   /// 清空所有缓存
   void clear() {
+    // 🔧 修复：清理前先安全释放所有图片资源
+    for (final item in _imageCache.values) {
+      if (_canSafelyDisposeImage(item.image)) {
+        try {
+          item.image.dispose();
+        } catch (e) {
+          if (kDebugMode) {
+            print('Warning: Error disposing image during cache clear - $e');
+          }
+        }
+      }
+    }
+    
+    // 清理MovieEntity，但不强制dispose（可能还有引用）
+    for (final item in _cache.values) {
+      final entity = item.movieEntity;
+      _cleanupMovieEntityImages(entity);
+      // 只在没有外部引用时才dispose
+      if (entity.referenceCount <= 0 && !entity.isDisposed) {
+        entity.dispose();
+      }
+    }
+    
     _cache.clear();
     _imageCache.clear();
     _currentSizeInBytes = 0;
@@ -305,15 +347,34 @@ class SVGACache {
       }
     }
     
-    // 移除过期项目
+    // 移除过期的SVGA项目
     for (var key in expiredKeys) {
       final item = _cache.remove(key)!;
       _currentSizeInBytes -= item.sizeInBytes;
+      
+      // 🔧 修复：安全处理过期的MovieEntity
+      final entity = item.movieEntity;
+      if (entity.referenceCount <= 0 && !entity.isDisposed) {
+        _cleanupMovieEntityImages(entity);
+        entity.dispose();
+      }
     }
     
+    // 移除过期的图片项目
     for (var hash in expiredImageHashes) {
       final item = _imageCache.remove(hash)!;
       _currentImageSizeInBytes -= item.sizeInBytes;
+      
+      // 🔧 修复：安全dispose过期的图片
+      if (_canSafelyDisposeImage(item.image)) {
+        try {
+          item.image.dispose();
+        } catch (e) {
+          if (kDebugMode) {
+            print('Warning: Error disposing expired image - $e');
+          }
+        }
+      }
     }
   }
 
@@ -345,6 +406,53 @@ class SVGACache {
         'usage_percentage': ((_currentSizeInBytes + _currentImageSizeInBytes) / maxSizeInBytes * 100).toStringAsFixed(1),
       }
     };
+  }
+
+  /// 🔧 新增：清理MovieEntity中的图片引用，避免双重dispose
+  void _cleanupMovieEntityImages(MovieEntity entity) {
+    // 遍历MovieEntity的bitmapCache，移除在imageCache中的重复引用
+    final imagesToRemove = <String>[];
+    
+    for (final imageEntry in entity.bitmapCache.entries) {
+      final image = imageEntry.value;
+      
+      // 查找这个图片是否也在imageCache中
+      for (final cacheEntry in _imageCache.entries) {
+        if (identical(cacheEntry.value.image, image)) {
+          // 找到了重复引用，从imageCache中移除（但不dispose，让MovieEntity处理）
+          imagesToRemove.add(cacheEntry.key);
+          _currentImageSizeInBytes -= cacheEntry.value.sizeInBytes;
+        }
+      }
+    }
+    
+    // 移除重复的图片缓存项
+    for (final hash in imagesToRemove) {
+      _imageCache.remove(hash);
+    }
+  }
+  
+  /// 🔧 新增：检查图片是否可以安全dispose
+  bool _canSafelyDisposeImage(ui.Image image) {
+    // 检查这个图片是否还在任何MovieEntity的bitmapCache中被使用
+    for (final cacheItem in _cache.values) {
+      final entity = cacheItem.movieEntity;
+      if (!entity.isDisposed) {
+        for (final cachedImage in entity.bitmapCache.values) {
+          if (identical(cachedImage, image)) {
+            // 图片还在使用中，不能dispose
+            return false;
+          }
+        }
+        // 也检查动态图片
+        for (final dynamicImage in entity.dynamicItem.dynamicImages.values) {
+          if (identical(dynamicImage, image)) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
   }
 
   /// 格式化字节数
