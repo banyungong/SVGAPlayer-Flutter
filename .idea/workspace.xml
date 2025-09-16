@@ -6,14 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="665113db-b9a7-48d1-bb33-eda968d1f970" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/main.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/lib/optimization_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/example/lib/optimization_test.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/example/pubspec.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/example/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/example/pubspec.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/painter.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/painter.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/lib/parser.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/parser.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/player.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/player.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/lib/proto/svga.pb.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/proto/svga.pb.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/svga_cache.dart" beforeDir="false" afterPath="$PROJECT_DIR$/lib/svga_cache.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -73,6 +67,7 @@
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "dart.analysis.tool.window.visible": "false",
+    "git-widget-placeholder": "hotfix",
     "io.flutter.reload.alreadyRun": "true",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "/Users/liruopeng/projects/SVGAPlayer-Flutter",

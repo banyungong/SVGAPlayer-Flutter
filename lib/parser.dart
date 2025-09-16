@@ -292,17 +292,6 @@ class SVGAParser {
 
   Future<ui.Image?> _decodeImageItem(String key, Uint8List bytes,
       {TimelineTask? timeline, bool createIndependentCopy = false}) async {
-    // 首先尝试从图片缓存获取
-    final cachedImage = _cache.getImage(bytes);
-    if (cachedImage != null && !createIndependentCopy) {
-      return cachedImage;
-    }
-    
-    // 如果需要创建独立副本，即使有缓存也要重新解码
-    if (createIndependentCopy && cachedImage != null) {
-      // 创建现有图片的独立副本
-      return await _createImageCopy(cachedImage);
-    }
     
     TimelineTask? task;
     if (!kReleaseMode) {
@@ -347,10 +336,6 @@ class SVGAParser {
         );
       }
       
-      // 将处理后的图片加入缓存（只有在不创建独立副本时才缓存）
-      if (!createIndependentCopy) {
-        _cache.putImage(bytes, finalImage);
-      }
       
       return finalImage;
     } catch (e, stack) {
