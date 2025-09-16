@@ -56,6 +56,12 @@ class SVGACache {
   
   int _currentSizeInBytes = 0;
   int _currentImageSizeInBytes = 0;
+  
+  // 缓存命中率统计
+  int _cacheHits = 0;
+  int _cacheMisses = 0;
+  int _imageHits = 0;
+  int _imageMisses = 0;
 
   SVGACache({
     this.maxSizeInBytes = _defaultMaxSizeInBytes,
@@ -64,7 +70,17 @@ class SVGACache {
 
   /// 生成缓存键
   String _generateCacheKey(String path) {
-    return path;
+    // 🔧 修复：确保缓存键的唯一性，特别是对于URL和文件路径
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      // 对于URL，使用完整路径作为键
+      return 'url:$path';
+    } else if (path.startsWith('/')) {
+      // 对于绝对路径，使用完整路径作为键
+      return 'file:$path';
+    } else {
+      // 对于asset路径，添加前缀确保唯一性
+      return 'asset:$path';
+    }
   }
 
   /// 生成图片数据的哈希
@@ -110,6 +126,12 @@ class SVGACache {
       size += audio.audioKey.length * 2; // 音频键字符串
       size += 20; // 其他audio字段(5个int)
     }
+    
+    // 🔧 修复：包含实际图片内存，避免重复计算
+    for (var image in entity.bitmapCache.values) {
+      size += _calculateImageSize(image);
+    }
+    
     return size;
   }
 
@@ -125,6 +147,7 @@ class SVGACache {
     final item = _cache[key];
     
     if (item != null) {
+      _cacheHits++;
       item.updateAccessTime();
       
       // 直接返回原来的MovieEntity
@@ -135,6 +158,7 @@ class SVGACache {
       return entity;
     }
     
+    _cacheMisses++;
     return null;
   }
 
@@ -144,10 +168,12 @@ class SVGACache {
     final item = _imageCache[hash];
     
     if (item != null) {
+      _imageHits++;
       item.updateAccessTime();
       return item.image;
     }
     
+    _imageMisses++;
     return null;
   }
 
@@ -155,13 +181,25 @@ class SVGACache {
   void put(String path, MovieEntity entity) {
     final key = _generateCacheKey(path);
     
-    // 计算大小（包含解码后的图片）
-    final entitySize = _calculateMovieEntitySize(entity);
-    int imageSize = 0;
-    for (var image in entity.bitmapCache.values) {
-      imageSize += _calculateImageSize(image);
+    // 🔧 修复：检查是否已经存在相同的缓存项，避免重复缓存
+    if (_cache.containsKey(key)) {
+      final existingItem = _cache[key]!;
+      // 如果是同一个对象，只更新访问时间
+      if (identical(existingItem.movieEntity, entity)) {
+        existingItem.updateAccessTime();
+        return;
+      }
+      // 如果是不同对象，先移除旧的
+      _currentSizeInBytes -= existingItem.sizeInBytes;
+      final oldEntity = existingItem.movieEntity;
+      if (oldEntity.referenceCount <= 0 && !oldEntity.isDisposed) {
+        _cleanupMovieEntityImages(oldEntity);
+        oldEntity.dispose();
+      }
     }
-    final totalSize = entitySize + imageSize;
+    
+    // 🔧 修复：避免重复计算图片内存，_calculateMovieEntitySize已经包含了图片内存
+    final totalSize = _calculateMovieEntitySize(entity);
     
     // 检查是否超过单个项目的大小限制
     if (totalSize > maxSizeInBytes * 0.5) {
@@ -192,6 +230,26 @@ class SVGACache {
     
     // 检查是否已存在
     if (_imageCache.containsKey(hash)) {
+      return;
+    }
+    
+    // 🔧 修复：检查这个图片是否已经在任何MovieEntity的bitmapCache中
+    bool alreadyInBitmapCache = false;
+    for (final cacheItem in _cache.values) {
+      final entity = cacheItem.movieEntity;
+      if (!entity.isDisposed) {
+        for (final cachedImage in entity.bitmapCache.values) {
+          if (identical(cachedImage, image)) {
+            alreadyInBitmapCache = true;
+            break;
+          }
+        }
+      }
+      if (alreadyInBitmapCache) break;
+    }
+    
+    // 如果图片已经在bitmapCache中，不要重复缓存
+    if (alreadyInBitmapCache) {
       return;
     }
     
@@ -325,6 +383,12 @@ class SVGACache {
     _imageCache.clear();
     _currentSizeInBytes = 0;
     _currentImageSizeInBytes = 0;
+    
+    // 重置统计数据
+    _cacheHits = 0;
+    _cacheMisses = 0;
+    _imageHits = 0;
+    _imageMisses = 0;
   }
 
   /// 清空过期缓存 (超过指定时间未访问)
@@ -380,6 +444,29 @@ class SVGACache {
 
   /// 获取缓存统计信息
   Map<String, dynamic> getStats() {
+    // 计算实际的图片内存使用
+    int actualImageMemory = 0;
+    int totalImageCount = 0;
+    
+    // 统计bitmapCache中的图片
+    for (final cacheItem in _cache.values) {
+      final entity = cacheItem.movieEntity;
+      if (!entity.isDisposed) {
+        for (final image in entity.bitmapCache.values) {
+          actualImageMemory += _calculateImageSize(image);
+          totalImageCount++;
+        }
+      }
+    }
+    
+    // 统计imageCache中的图片（排除重复的）
+    int imageCacheMemory = 0;
+    int imageCacheCount = 0;
+    for (final item in _imageCache.values) {
+      imageCacheMemory += item.sizeInBytes;
+      imageCacheCount++;
+    }
+    
     return {
       'svga_cache': {
         'count': _cache.length,
@@ -391,19 +478,32 @@ class SVGACache {
         'usage_percentage': (_currentSizeInBytes / maxSizeInBytes * 100).toStringAsFixed(1),
       },
       'image_cache': {
-        'count': _imageCache.length,
-        'size_bytes': _currentImageSizeInBytes,
-        'size_formatted': _formatBytes(_currentImageSizeInBytes),
+        'count': imageCacheCount,
+        'size_bytes': imageCacheMemory,
+        'size_formatted': _formatBytes(imageCacheMemory),
         'max_size_bytes': maxSizeInBytes ~/ 4,
         'max_size_formatted': _formatBytes(maxSizeInBytes ~/ 4),
-        'usage_percentage': (_currentImageSizeInBytes / (maxSizeInBytes ~/ 4) * 100).toStringAsFixed(1),
+        'usage_percentage': (imageCacheMemory / (maxSizeInBytes ~/ 4) * 100).toStringAsFixed(1),
+      },
+      'actual_images': {
+        'total_count': totalImageCount,
+        'total_memory_bytes': actualImageMemory,
+        'total_memory_formatted': _formatBytes(actualImageMemory),
       },
       'total': {
-        'size_bytes': _currentSizeInBytes + _currentImageSizeInBytes,
-        'size_formatted': _formatBytes(_currentSizeInBytes + _currentImageSizeInBytes),
+        'size_bytes': _currentSizeInBytes + imageCacheMemory,
+        'size_formatted': _formatBytes(_currentSizeInBytes + imageCacheMemory),
         'max_size_bytes': maxSizeInBytes,
         'max_size_formatted': _formatBytes(maxSizeInBytes),
-        'usage_percentage': ((_currentSizeInBytes + _currentImageSizeInBytes) / maxSizeInBytes * 100).toStringAsFixed(1),
+        'usage_percentage': ((_currentSizeInBytes + imageCacheMemory) / maxSizeInBytes * 100).toStringAsFixed(1),
+      },
+      'performance': {
+        'svga_cache_hit_rate': _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) + '%' : '0%',
+        'image_cache_hit_rate': _imageHits + _imageMisses > 0 ? (_imageHits / (_imageHits + _imageMisses) * 100).toStringAsFixed(1) + '%' : '0%',
+        'svga_hits': _cacheHits,
+        'svga_misses': _cacheMisses,
+        'image_hits': _imageHits,
+        'image_misses': _imageMisses,
       }
     };
   }
@@ -453,6 +553,47 @@ class SVGACache {
       }
     }
     return true;
+  }
+
+  /// 🔧 新增：强制清理重复的图片缓存
+  void cleanupDuplicateImages() {
+    final imagesToRemove = <String>[];
+    
+    // 遍历imageCache，检查是否有图片在bitmapCache中重复
+    for (final imageEntry in _imageCache.entries) {
+      final image = imageEntry.value.image;
+      bool isDuplicate = false;
+      
+      // 检查这个图片是否在任何MovieEntity的bitmapCache中
+      for (final cacheItem in _cache.values) {
+        final entity = cacheItem.movieEntity;
+        if (!entity.isDisposed) {
+          for (final cachedImage in entity.bitmapCache.values) {
+            if (identical(cachedImage, image)) {
+              isDuplicate = true;
+              break;
+            }
+          }
+        }
+        if (isDuplicate) break;
+      }
+      
+      if (isDuplicate) {
+        imagesToRemove.add(imageEntry.key);
+      }
+    }
+    
+    // 移除重复的图片缓存
+    for (final hash in imagesToRemove) {
+      final item = _imageCache.remove(hash);
+      if (item != null) {
+        _currentImageSizeInBytes -= item.sizeInBytes;
+      }
+    }
+    
+    if (kDebugMode && imagesToRemove.isNotEmpty) {
+      print('SVGACache: 清理了 ${imagesToRemove.length} 个重复的图片缓存');
+    }
   }
 
   /// 格式化字节数

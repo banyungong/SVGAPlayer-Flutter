@@ -145,7 +145,7 @@ class HomeScreen extends StatelessWidget {
       description: 'LRU缓存和资源复用效果测试',
       icon: Icons.storage,
       color: Colors.purple,
-      builder: (context) => CacheTestScreen(),
+      builder: (context) => CacheTestPage(),
     ),
     TestCategory(
       title: '性能压力测试',

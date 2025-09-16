@@ -42,8 +42,7 @@ class SVGAParser {
     // 首先尝试从缓存获取
     final cached = _cache.get(url);
     if (cached != null) {
-      // 缓存命中时需要增加引用计数
-      cached.addReference();
+      // 缓存命中时不需要增加引用计数，因为get()方法已经设置了autorelease=false
       return cached;
     }
     
@@ -57,8 +56,7 @@ class SVGAParser {
     // 首先尝试从缓存获取
     final cached = _cache.get(path);
     if (cached != null) {
-      // 缓存命中时需要增加引用计数
-      cached.addReference();
+      // 缓存命中时不需要增加引用计数，因为get()方法已经设置了autorelease=false
       return cached;
     }
     
@@ -75,8 +73,7 @@ class SVGAParser {
     // 首先尝试从缓存获取
     final cached = _cache.get(absolutePath);
     if (cached != null) {
-      // 缓存命中时需要增加引用计数
-      cached.addReference();
+      // 缓存命中时不需要增加引用计数，因为get()方法已经设置了autorelease=false
       return cached;
     }
     
@@ -108,6 +105,11 @@ class SVGAParser {
   static void clearExpiredCache(Duration maxAge) {
     _cache.clearExpired(maxAge);
   }
+  
+  /// 清理重复的图片缓存
+  static void cleanupDuplicateImages() {
+    _cache.cleanupDuplicateImages();
+  }
 
   /// Download animation file from buffer, and decode it.
   Future<MovieEntity> decodeFromBuffer(List<int> bytes, {String? cacheKey}) async {
@@ -136,13 +138,13 @@ class SVGAParser {
       timeline: timeline,
       );
       
+      // 初始化引用计数（parser创建的实例默认有1个引用）
+      result.addReference();
+      
       // 如果有缓存键，将结果加入缓存
       if (cacheKey != null) {
         _cache.put(cacheKey, result);
       }
-      
-      // 初始化引用计数（parser创建的实例默认有1个引用）
-      result.addReference();
       
       return result;
     } finally {
@@ -347,7 +349,7 @@ class SVGAParser {
         );
       }
       
-      // 将处理后的图片加入缓存（只有在不创建独立副本时才缓存）
+      // 🔧 修复：直接使用putImage方法，它内部已经有重复检查逻辑
       if (!createIndependentCopy) {
         _cache.putImage(bytes, finalImage);
       }
